@@ -1,0 +1,358 @@
+@import "tailwindcss";
+@import "tw-animate-css";
+
+@custom-variant dark (&:is(.dark *));
+
+@theme inline {
+  --radius-sm: calc(var(--radius) - 4px);
+  --radius-md: calc(var(--radius) - 2px);
+  --radius-lg: var(--radius);
+  --radius-xl: calc(var(--radius) + 4px);
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-card: var(--card);
+  --color-card-foreground: var(--card-foreground);
+  --color-popover: var(--popover);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-secondary: var(--secondary);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-destructive: var(--destructive);
+  --color-destructive-foreground: var(--destructive-foreground);
+  --color-border: var(--border);
+  --color-input: var(--input);
+  --color-ring: var(--ring);
+  --color-chart-1: var(--chart-1);
+  --color-chart-2: var(--chart-2);
+  --color-chart-3: var(--chart-3);
+  --color-chart-4: var(--chart-4);
+  --color-chart-5: var(--chart-5);
+  --color-sidebar: var(--sidebar);
+  --color-sidebar-foreground: var(--sidebar-foreground);
+  --color-sidebar-primary: var(--sidebar-primary);
+  --color-sidebar-primary-foreground: var(--sidebar-primary-foreground);
+  --color-sidebar-accent: var(--sidebar-accent);
+  --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
+  --color-sidebar-border: var(--sidebar-border);
+  --color-sidebar-ring: var(--sidebar-ring);
+}
+
+/* Light Theme - Minimalistic Apple-inspired */
+:root {
+  --radius: 0.625rem;
+  --background: oklch(0.985 0 0);
+  --foreground: oklch(0.145 0.015 250);
+  --card: oklch(1 0 0);
+  --card-foreground: oklch(0.145 0.015 250);
+  --popover: oklch(1 0 0);
+  --popover-foreground: oklch(0.145 0.015 250);
+  --primary: oklch(0.40 0.01 250);
+  --primary-foreground: oklch(0.98 0 0);
+  --secondary: oklch(0.965 0.003 250);
+  --secondary-foreground: oklch(0.25 0.01 250);
+  --muted: oklch(0.955 0.003 250);
+  --muted-foreground: oklch(0.50 0.01 250);
+  --accent: oklch(0.965 0.003 250);
+  --accent-foreground: oklch(0.145 0.015 250);
+  --destructive: oklch(0.55 0.20 25);
+  --destructive-foreground: oklch(0.98 0 0);
+  --border: oklch(0.92 0.003 250);
+  --input: oklch(0.955 0.003 250);
+  --ring: oklch(0.40 0.01 250);
+  --chart-1: oklch(0.35 0.01 250);
+  --chart-2: oklch(0.45 0.01 250);
+  --chart-3: oklch(0.55 0.01 250);
+  --chart-4: oklch(0.40 0.01 250);
+  --chart-5: oklch(0.50 0.01 250);
+  --sidebar: oklch(0.99 0 0);
+  --sidebar-foreground: oklch(0.145 0.015 250);
+  --sidebar-primary: oklch(0.35 0.01 250);
+  --sidebar-primary-foreground: oklch(0.98 0 0);
+  --sidebar-accent: oklch(0.965 0.003 250);
+  --sidebar-accent-foreground: oklch(0.145 0.015 250);
+  --sidebar-border: oklch(0.94 0.003 250);
+  --sidebar-ring: oklch(0.40 0.01 250);
+  --gold: oklch(0.55 0.12 55);
+  --gold-light: oklch(0.65 0.10 55);
+  --gold-dark: oklch(0.45 0.10 55);
+}
+
+/* Apple Photos-inspired Dark Theme */
+.dark {
+  --radius: 0.625rem;
+  --background: oklch(0.12 0.01 250);
+  --foreground: oklch(0.95 0.01 250);
+  --card: oklch(0.16 0.01 250);
+  --card-foreground: oklch(0.95 0.01 250);
+  --popover: oklch(0.16 0.01 250);
+  --popover-foreground: oklch(0.95 0.01 250);
+  --primary: oklch(0.78 0.14 55);
+  --primary-foreground: oklch(0.15 0.02 55);
+  --secondary: oklch(0.20 0.01 250);
+  --secondary-foreground: oklch(0.95 0.01 250);
+  --muted: oklch(0.22 0.01 250);
+  --muted-foreground: oklch(0.60 0.01 250);
+  --accent: oklch(0.22 0.02 250);
+  --accent-foreground: oklch(0.95 0.01 250);
+  --destructive: oklch(0.55 0.22 25);
+  --destructive-foreground: oklch(0.95 0.01 250);
+  --border: oklch(0.25 0.01 250);
+  --input: oklch(0.20 0.01 250);
+  --ring: oklch(0.78 0.14 55);
+  --chart-1: oklch(0.78 0.14 55);
+  --chart-2: oklch(0.65 0.12 180);
+  --chart-3: oklch(0.55 0.15 280);
+  --chart-4: oklch(0.70 0.12 140);
+  --chart-5: oklch(0.60 0.18 25);
+  --sidebar: oklch(0.10 0.01 250);
+  --sidebar-foreground: oklch(0.95 0.01 250);
+  --sidebar-primary: oklch(0.78 0.14 55);
+  --sidebar-primary-foreground: oklch(0.15 0.02 55);
+  --sidebar-accent: oklch(0.18 0.01 250);
+  --sidebar-accent-foreground: oklch(0.95 0.01 250);
+  --sidebar-border: oklch(0.20 0.01 250);
+  --sidebar-ring: oklch(0.78 0.14 55);
+  --gold: oklch(0.78 0.14 55);
+  --gold-light: oklch(0.85 0.10 55);
+  --gold-dark: oklch(0.60 0.12 55);
+}
+
+/* Light mode scrollbar */
+:root:not(.dark) ::-webkit-scrollbar-thumb {
+  background: oklch(0.85 0 0);
+}
+:root:not(.dark) ::-webkit-scrollbar-thumb:hover {
+  background: oklch(0.75 0 0);
+}
+
+/* Light mode photo grid hover */
+:root:not(.dark) .photo-grid-item:hover {
+  box-shadow: 0 8px 30px rgba(0, 0, 0, 0.08);
+}
+
+/* Light mode collection card */
+:root:not(.dark) .collection-card:hover {
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.06);
+}
+
+/* Light mode stat cards - clean white with subtle border */
+:root:not(.dark) .stat-card-light {
+  background: oklch(1 0 0);
+  border: 1px solid oklch(0.94 0 0);
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.04);
+}
+:root:not(.dark) .stat-card-light:hover {
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.06);
+}
+
+/* Light mode bulletin banner */
+:root:not(.dark) .bulletin-banner-light {
+  background: oklch(0.99 0 0);
+  border: 1px solid oklch(0.94 0 0);
+}
+
+/* Light mode gold price card */
+:root:not(.dark) .gold-card-light {
+  background: oklch(0.995 0.005 55);
+  border: 1px solid oklch(0.92 0.02 55);
+}
+
+@layer base {
+  * {
+    @apply border-border outline-ring/50;
+  }
+  body {
+    @apply bg-background text-foreground antialiased;
+    font-family: -apple-system, BlinkMacSystemFont, "SF Pro Display", "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  }
+  button:not(:disabled),
+  [role="button"]:not([aria-disabled="true"]),
+  [type="button"]:not(:disabled),
+  [type="submit"]:not(:disabled),
+  [type="reset"]:not(:disabled),
+  a[href],
+  select:not(:disabled),
+  input[type="checkbox"]:not(:disabled),
+  input[type="radio"]:not(:disabled) {
+    @apply cursor-pointer;
+  }
+  
+  /* Custom scrollbar for Apple-like feel */
+  ::-webkit-scrollbar {
+    width: 8px;
+    height: 8px;
+  }
+  ::-webkit-scrollbar-track {
+    background: transparent;
+  }
+  ::-webkit-scrollbar-thumb {
+    background: oklch(0.30 0.01 250);
+    border-radius: 4px;
+  }
+  ::-webkit-scrollbar-thumb:hover {
+    background: oklch(0.40 0.01 250);
+  }
+}
+
+@layer components {
+  .container {
+    width: 100%;
+    margin-left: auto;
+    margin-right: auto;
+    padding-left: 1rem;
+    padding-right: 1rem;
+  }
+
+  .flex {
+    min-height: 0;
+    min-width: 0;
+  }
+
+  @media (min-width: 640px) {
+    .container {
+      padding-left: 1.5rem;
+      padding-right: 1.5rem;
+    }
+  }
+
+  @media (min-width: 1024px) {
+    .container {
+      padding-left: 2rem;
+      padding-right: 2rem;
+      max-width: 1400px;
+    }
+  }
+}
+
+/* Apple Photos-inspired animations */
+@keyframes fadeIn {
+  from { opacity: 0; transform: scale(0.98); }
+  to { opacity: 1; transform: scale(1); }
+}
+
+@keyframes slideUp {
+  from { opacity: 0; transform: translateY(8px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+.animate-fadeIn {
+  animation: fadeIn 0.2s ease-out forwards;
+}
+
+.animate-slideUp {
+  animation: slideUp 0.25s ease-out forwards;
+}
+
+/* Photo grid item hover effect */
+.photo-grid-item {
+  transition: transform 0.2s ease, box-shadow 0.2s ease;
+}
+.photo-grid-item:hover {
+  transform: scale(1.02);
+  box-shadow: 0 8px 30px rgba(0, 0, 0, 0.5);
+}
+
+/* Collection card styling */
+.collection-card {
+  transition: all 0.2s ease;
+}
+.collection-card:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 12px 40px rgba(0, 0, 0, 0.4);
+}
+
+/* Tab styling */
+.tab-item {
+  position: relative;
+  transition: color 0.2s ease;
+}
+.tab-item::after {
+  content: '';
+  position: absolute;
+  bottom: -2px;
+  left: 0;
+  right: 0;
+  height: 2px;
+  background: transparent;
+  transition: background 0.2s ease;
+  border-radius: 1px;
+}
+.tab-item.active::after {
+  background: oklch(0.78 0.14 55);
+}
+.tab-item.active {
+  color: oklch(0.78 0.14 55);
+}
+
+/* Light mode tab styling */
+:root:not(.dark) .tab-item.active::after {
+  background: oklch(0.35 0.01 250);
+}
+:root:not(.dark) .tab-item.active {
+  color: oklch(0.20 0.01 250);
+}
+
+/* Gold accent gradient */
+.gold-gradient {
+  background: linear-gradient(135deg, oklch(0.78 0.14 55), oklch(0.65 0.12 50));
+}
+
+/* Light mode gold gradient - more subtle */
+:root:not(.dark) .gold-gradient {
+  background: linear-gradient(135deg, oklch(0.55 0.12 55), oklch(0.50 0.10 50));
+}
+
+/* Glass morphism effect */
+.glass {
+  background: oklch(0.16 0.01 250 / 0.9);
+  backdrop-filter: blur(20px);
+  border: 1px solid oklch(0.25 0.01 250);
+}
+
+/* Light mode glass */
+:root:not(.dark) .glass {
+  background: oklch(1 0 0 / 0.9);
+  backdrop-filter: blur(20px);
+  border: 1px solid oklch(0.94 0 0);
+}
+
+/* Image placeholder shimmer */
+@keyframes shimmer {
+  0% { background-position: -200% 0; }
+  100% { background-position: 200% 0; }
+}
+.shimmer {
+  background: linear-gradient(90deg, oklch(0.18 0.01 250) 25%, oklch(0.22 0.01 250) 50%, oklch(0.18 0.01 250) 75%);
+  background-size: 200% 100%;
+  animation: shimmer 1.5s infinite;
+}
+
+/* Light mode shimmer */
+:root:not(.dark) .shimmer {
+  background: linear-gradient(90deg, oklch(0.96 0 0) 25%, oklch(0.98 0 0) 50%, oklch(0.96 0 0) 75%);
+  background-size: 200% 100%;
+}
+
+/* Sidebar nav item */
+.sidebar-nav-item {
+  transition: all 0.15s ease;
+}
+.sidebar-nav-item:hover {
+  background: oklch(0.18 0.01 250);
+}
+.sidebar-nav-item.active {
+  background: oklch(0.20 0.02 250);
+}
+
+/* Light mode sidebar nav */
+:root:not(.dark) .sidebar-nav-item:hover {
+  background: oklch(0.97 0 0);
+}
+:root:not(.dark) .sidebar-nav-item.active {
+  background: oklch(0.96 0 0);
+}
