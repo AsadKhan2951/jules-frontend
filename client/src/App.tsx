@@ -1,7 +1,7 @@
 import { Toaster } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import NotFound from "@/pages/NotFound";
-import { Route, Switch, useLocation } from "wouter";
+import { Route, Switch } from "wouter";
 import ErrorBoundary from "./components/ErrorBoundary";
 import { ThemeProvider } from "./contexts/ThemeContext";
 import DashboardLayout from "./components/DashboardLayout";
@@ -16,7 +16,6 @@ import CatalogComments from "./pages/CatalogComments";
 import Orders from "./pages/Orders";
 import OrderDetail from "./pages/OrderDetail";
 import CustomerDetail from "./pages/CustomerDetail";
-import JulesBotChat from "./components/JulesBotChat";
 
 function Router() {
   return (
@@ -82,18 +81,6 @@ function Router() {
   );
 }
 
-// Component to conditionally render chat widget (hide on preview pages)
-function ConditionalChatWidget() {
-  const [location] = useLocation();
-  
-  // Hide chat widget on public preview pages
-  if (location.startsWith('/preview/')) {
-    return null;
-  }
-  
-  return <JulesBotChat />;
-}
-
 function App() {
   return (
     <ErrorBoundary>
@@ -101,7 +88,6 @@ function App() {
         <TooltipProvider>
           <Toaster />
           <Router />
-          <ConditionalChatWidget />
         </TooltipProvider>
       </ThemeProvider>
     </ErrorBoundary>
