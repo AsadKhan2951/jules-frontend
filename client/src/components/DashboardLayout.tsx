@@ -27,7 +27,6 @@ import {
   CollapsibleContent,
   CollapsibleTrigger,
 } from "@/components/ui/collapsible";
-import { getLoginUrl } from "@/const";
 import { useIsMobile } from "@/hooks/useMobile";
 import { useTheme } from "@/contexts/ThemeContext";
 import { 
@@ -50,6 +49,8 @@ import { CSSProperties, useEffect, useRef, useState } from "react";
 import { useLocation } from "wouter";
 import { DashboardLayoutSkeleton } from './DashboardLayoutSkeleton';
 import { Button } from "./ui/button";
+import { Input } from "./ui/input";
+import { Label } from "./ui/label";
 import {
   CommandDialog,
   CommandEmpty,
@@ -83,6 +84,15 @@ export default function DashboardLayout({
     return saved ? parseInt(saved, 10) : DEFAULT_WIDTH;
   });
   const { loading, user } = useAuth();
+  const utils = trpc.useUtils();
+  const [loginEmail, setLoginEmail] = useState("");
+  const [loginPassword, setLoginPassword] = useState("");
+  const loginMutation = trpc.auth.login.useMutation({
+    onSuccess: () => {
+      setLoginPassword("");
+      utils.auth.me.invalidate();
+    },
+  });
 
   useEffect(() => {
     localStorage.setItem(SIDEBAR_WIDTH_KEY, sidebarWidth.toString());
@@ -110,15 +120,54 @@ export default function DashboardLayout({
               Sign in to manage your jewelry catalogs, products, and customers.
             </p>
           </div>
-          <Button
-            onClick={() => {
-              window.location.href = getLoginUrl();
+          <form
+            className="w-full grid gap-4"
+            onSubmit={(event) => {
+              event.preventDefault();
+              loginMutation.mutate({
+                email: loginEmail.trim(),
+                password: loginPassword,
+              });
             }}
-            size="lg"
-            className="w-full gold-gradient text-primary-foreground font-medium shadow-lg hover:shadow-xl transition-all border-0"
           >
-            Sign in
-          </Button>
+            <div className="grid gap-2">
+              <Label htmlFor="login-email">Email</Label>
+              <Input
+                id="login-email"
+                type="email"
+                autoComplete="username"
+                value={loginEmail}
+                onChange={(event) => setLoginEmail(event.target.value)}
+                placeholder="admin@company.com"
+                required
+              />
+            </div>
+            <div className="grid gap-2">
+              <Label htmlFor="login-password">Password</Label>
+              <Input
+                id="login-password"
+                type="password"
+                autoComplete="current-password"
+                value={loginPassword}
+                onChange={(event) => setLoginPassword(event.target.value)}
+                placeholder="Enter your password"
+                required
+              />
+            </div>
+            {loginMutation.error ? (
+              <p className="text-sm text-destructive">
+                {loginMutation.error.message || "Login failed"}
+              </p>
+            ) : null}
+            <Button
+              type="submit"
+              size="lg"
+              className="w-full gold-gradient text-primary-foreground font-medium shadow-lg hover:shadow-xl transition-all border-0"
+              disabled={loginMutation.isPending}
+            >
+              {loginMutation.isPending ? "Signing in..." : "Sign in"}
+            </Button>
+          </form>
         </div>
       </div>
     );
