@@ -43,7 +43,10 @@ import {
   Moon,
   Search,
   ChevronRight,
-  Crown
+  Crown,
+  WalletCards,
+  ShieldCheck,
+  ReceiptText,
 } from "lucide-react";
 import { CSSProperties, useEffect, useRef, useState } from "react";
 import { useLocation } from "wouter";
@@ -62,11 +65,14 @@ import {
 import { trpc } from "@/lib/trpc";
 
 const menuItems = [
-  { icon: LayoutDashboard, label: "Dashboard", path: "/" },
-  { icon: Package, label: "Products", path: "/products" },
-  { icon: BookOpen, label: "Catalogs", path: "/catalogs" },
-  { icon: Users, label: "Customers", path: "/customers" },
-  { icon: ShoppingCart, label: "Orders", path: "/orders" },
+  { icon: LayoutDashboard, label: "Dashboard", path: "/", roles: ["admin"] },
+  { icon: Package, label: "Products", path: "/products", roles: ["admin"] },
+  { icon: BookOpen, label: "Catalogs", path: "/catalogs", roles: ["admin"] },
+  { icon: Users, label: "Customers", path: "/customers", roles: ["admin", "operations_finance"] },
+  { icon: ShoppingCart, label: "Orders", path: "/orders", roles: ["admin", "operations_finance"] },
+  { icon: ReceiptText, label: "Invoices", path: "/invoices", roles: ["admin", "operations_finance"] },
+  { icon: WalletCards, label: "Finance", path: "/finance", roles: ["admin", "operations_finance"] },
+  { icon: ShieldCheck, label: "Users & Access", path: "/access", roles: ["admin"] },
 ];
 
 const SIDEBAR_WIDTH_KEY = "sidebar-width";
@@ -208,12 +214,15 @@ function DashboardLayoutContent({
   const [searchOpen, setSearchOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
   const [collectionsOpen, setCollectionsOpen] = useState(true);
+  const isAdmin = user?.role === "admin";
+  const hasBusinessAccess = user?.role === "admin" || user?.role === "operations_finance";
+  const visibleMenuItems = menuItems.filter(item => item.roles.includes(user?.role || "user"));
 
-  // Fetch data for search and collections
-  const { data: products } = trpc.products.list.useQuery();
-  const { data: customers } = trpc.customers.list.useQuery();
-  const { data: catalogs } = trpc.catalogs.list.useQuery();
-  const { data: collections } = trpc.collections.list.useQuery();
+  // Fetch data for search and collections (only what this role may see)
+  const { data: products } = trpc.products.list.useQuery(undefined, { enabled: isAdmin });
+  const { data: customers } = trpc.customers.list.useQuery(undefined, { enabled: hasBusinessAccess });
+  const { data: catalogs } = trpc.catalogs.list.useQuery(undefined, { enabled: isAdmin });
+  const { data: collections } = trpc.collections.list.useQuery(undefined, { enabled: isAdmin });
 
   // Filter results based on search query
   const filteredProducts = products?.filter(p => 
@@ -252,6 +261,12 @@ function DashboardLayoutContent({
       setIsResizing(false);
     }
   }, [isCollapsed]);
+
+  useEffect(() => {
+    if (user?.role === "operations_finance" && location === "/") {
+      setLocation("/orders");
+    }
+  }, [location, setLocation, user?.role]);
 
   useEffect(() => {
     const handleMouseMove = (e: MouseEvent) => {
@@ -320,7 +335,7 @@ function DashboardLayoutContent({
           <SidebarContent className="gap-0 pt-3">
             <SidebarMenu className="px-2 py-1 space-y-1">
               {/* Regular menu items before Shaikha Collection */}
-              {menuItems.slice(0, 2).map(item => {
+              {visibleMenuItems.filter(item => item.path === "/" || item.path === "/products").map(item => {
                 const isActive = location === item.path;
                 return (
                   <SidebarMenuItem key={item.path}>
@@ -344,7 +359,7 @@ function DashboardLayoutContent({
               })}
 
               {/* Shaikha Collection with submenu */}
-              <Collapsible
+              {isAdmin && <Collapsible
                 open={collectionsOpen}
                 onOpenChange={setCollectionsOpen}
                 className="group/collapsible"
@@ -405,10 +420,10 @@ function DashboardLayoutContent({
                     </SidebarMenuSub>
                   </CollapsibleContent>
                 </SidebarMenuItem>
-              </Collapsible>
+              </Collapsible>}
 
               {/* Rest of menu items after Shaikha Collection */}
-              {menuItems.slice(2).map(item => {
+              {visibleMenuItems.filter(item => item.path !== "/" && item.path !== "/products").map(item => {
                 const isActive = location === item.path;
                 return (
                   <SidebarMenuItem key={item.path}>
@@ -447,7 +462,7 @@ function DashboardLayoutContent({
                       {user?.name || "-"}
                     </p>
                     <p className="text-xs text-muted-foreground truncate mt-1.5">
-                      {user?.email || "-"}
+                      {user?.role === "admin" ? "Super Admin" : user?.role === "operations_finance" ? "Operations & Finance" : "Awaiting Access"}
                     </p>
                   </div>
                 </button>

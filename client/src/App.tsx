@@ -1,7 +1,7 @@
 import { Toaster } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import NotFound from "@/pages/NotFound";
-import { Route, Switch } from "wouter";
+import { Redirect, Route, Switch, useLocation } from "wouter";
 import ErrorBoundary from "./components/ErrorBoundary";
 import { ThemeProvider } from "./contexts/ThemeContext";
 import DashboardLayout from "./components/DashboardLayout";
@@ -16,6 +16,13 @@ import CatalogComments from "./pages/CatalogComments";
 import Orders from "./pages/Orders";
 import OrderDetail from "./pages/OrderDetail";
 import CustomerDetail from "./pages/CustomerDetail";
+import CreateOrder from "./pages/CreateOrder";
+import JulesBotChat from "./components/JulesBotChat";
+import Finance from "./pages/Finance";
+import AccessManagement from "./pages/AccessManagement";
+import Invoices from "./pages/Invoices";
+import RoleGate from "./components/RoleGate";
+import { useAuth } from "./_core/hooks/useAuth";
 
 function Router() {
   return (
@@ -26,59 +33,97 @@ function Router() {
       {/* Protected routes with Dashboard Layout */}
       <Route path="/">
         <DashboardLayout>
-          <Dashboard />
+          <RoleGate allow={["admin"]}><Dashboard /></RoleGate>
         </DashboardLayout>
       </Route>
       <Route path="/products">
         <DashboardLayout>
-          <Products />
+          <RoleGate allow={["admin"]}><Products /></RoleGate>
         </DashboardLayout>
       </Route>
       <Route path="/collections">
         <DashboardLayout>
-          <Collections />
+          <RoleGate allow={["admin"]}><Collections /></RoleGate>
         </DashboardLayout>
       </Route>
       <Route path="/collections/:id">
         <DashboardLayout>
-          <CollectionDetail />
+          <RoleGate allow={["admin"]}><CollectionDetail /></RoleGate>
         </DashboardLayout>
       </Route>
       <Route path="/customers">
         <DashboardLayout>
-          <Customers />
+          <RoleGate allow={["admin", "operations_finance"]}><Customers /></RoleGate>
         </DashboardLayout>
       </Route>
       <Route path="/customers/:id">
         <DashboardLayout>
-          <CustomerDetail />
+          <RoleGate allow={["admin", "operations_finance"]}><CustomerDetail /></RoleGate>
         </DashboardLayout>
       </Route>
       <Route path="/catalogs">
         <DashboardLayout>
-          <Catalogs />
+          <RoleGate allow={["admin"]}><Catalogs /></RoleGate>
         </DashboardLayout>
       </Route>
       <Route path="/catalogs/:id/comments">
         <DashboardLayout>
-          <CatalogComments />
+          <RoleGate allow={["admin"]}><CatalogComments /></RoleGate>
         </DashboardLayout>
       </Route>
       <Route path="/orders">
         <DashboardLayout>
-          <Orders />
+          <RoleGate allow={["admin", "operations_finance"]}><Orders /></RoleGate>
+        </DashboardLayout>
+      </Route>
+      <Route path="/orders/new">
+        <DashboardLayout>
+          <RoleGate allow={["admin", "operations_finance"]}><CreateOrder /></RoleGate>
         </DashboardLayout>
       </Route>
       <Route path="/orders/:id">
         <DashboardLayout>
-          <OrderDetail />
+          <RoleGate allow={["admin", "operations_finance"]}><OrderDetail /></RoleGate>
         </DashboardLayout>
+      </Route>
+      <Route path="/finance">
+        <DashboardLayout>
+          <RoleGate allow={["admin", "operations_finance"]}><Finance /></RoleGate>
+        </DashboardLayout>
+      </Route>
+      <Route path="/invoices">
+        <DashboardLayout>
+          <RoleGate allow={["admin", "operations_finance"]}><Invoices /></RoleGate>
+        </DashboardLayout>
+      </Route>
+      <Route path="/access">
+        <DashboardLayout>
+          <RoleGate allow={["admin"]}><AccessManagement /></RoleGate>
+        </DashboardLayout>
+      </Route>
+
+      {/* Redirect removed pages */}
+      <Route path="/vendors">
+        <Redirect to="/orders" />
       </Route>
       
       <Route path="/404" component={NotFound} />
       <Route component={NotFound} />
     </Switch>
   );
+}
+
+// Component to conditionally render chat widget (hide on preview pages)
+function ConditionalChatWidget() {
+  const [location] = useLocation();
+  const { user } = useAuth();
+  
+  // Hide chat widget on public preview pages
+  if (location.startsWith('/preview/') || user?.role !== "admin") {
+    return null;
+  }
+  
+  return <JulesBotChat />;
 }
 
 function App() {
@@ -88,6 +133,7 @@ function App() {
         <TooltipProvider>
           <Toaster />
           <Router />
+          <ConditionalChatWidget />
         </TooltipProvider>
       </ThemeProvider>
     </ErrorBoundary>
