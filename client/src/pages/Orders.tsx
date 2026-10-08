@@ -80,6 +80,8 @@ export default function Orders() {
     return (
       orders?.filter((o) => {
         if (o.order.status === "saved") return false;
+        // Cancelled orders are hidden unless the Cancelled filter is picked.
+        if (o.order.status === "cancelled" && statusFilter !== "cancelled") return false;
         if (search) {
           const s = search.toLowerCase();
           if (
@@ -93,7 +95,7 @@ export default function Orders() {
         return true;
       }) || []
     );
-  }, [orders, search, customerFilter]);
+  }, [orders, search, customerFilter, statusFilter]);
 
   const savedOrders = useMemo(() => {
     return (
@@ -160,7 +162,7 @@ export default function Orders() {
             <SelectValue placeholder="All Status" />
           </SelectTrigger>
           <SelectContent>
-            <SelectItem value="all">All Status</SelectItem>
+            <SelectItem value="all">All (except cancelled)</SelectItem>
             {statusOptions
               .filter((s) => s.value !== "saved")
               .map((status) => (

@@ -81,6 +81,11 @@ function Router() {
           <RoleGate allow={["admin", "operations_finance"]}><CreateOrder /></RoleGate>
         </DashboardLayout>
       </Route>
+      <Route path="/orders/:id/edit">
+        <DashboardLayout>
+          <RoleGate allow={["admin", "operations_finance"]}><CreateOrder /></RoleGate>
+        </DashboardLayout>
+      </Route>
       <Route path="/orders/:id">
         <DashboardLayout>
           <RoleGate allow={["admin", "operations_finance"]}><OrderDetail /></RoleGate>

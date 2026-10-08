@@ -1,4 +1,6 @@
 import { trpc } from "@/lib/trpc";
+import { DateInput } from "@/components/DateInput";
+import { ImageUploader } from "@/components/ImageUploader";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -28,10 +30,12 @@ import {
   Gem,
   Coins,
   Factory,
+  ImageIcon,
+  Lock,
 } from "lucide-react";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { toast } from "sonner";
-import { useLocation } from "wouter";
+import { useLocation, useParams } from "wouter";
 
 const itemTypes = [
   "Necklace", "Earrings", "Ring", "Bracelet", "Bangle", "Pendant",
@@ -40,7 +44,32 @@ const itemTypes = [
 
 const metalTypes = ["Gold 22k", "Gold 24k", "Gold 18k", "Silver 925", "Platinum", "Other"];
 
+// Metals a customer can hand over as an advance.
+const advanceMetalTypes = [
+  "Gold 24k", "Gold 22k", "Gold 21k", "Gold 20k", "Gold 18k", "Gold 14k",
+  "Old Gold", "White Gold", "Rose Gold", "Silver", "Silver 925", "Platinum", "Palladium", "Other",
+];
+
+// 1 tola = 11.664 g = 96 ratti
+const TOLA_GRAMS = 11.664;
+const RATTI_GRAMS = TOLA_GRAMS / 96;
+
+function metalNetWeight(weight: string, wastage: string, wastageType: "percent" | "ratti") {
+  const w = parseFloat(weight) || 0;
+  const waste = parseFloat(wastage) || 0;
+  if (w <= 0) return 0;
+  const extra = wastageType === "ratti" ? (w / TOLA_GRAMS) * waste * RATTI_GRAMS : (w * waste) / 100;
+  return Math.round((w + extra) * 1000) / 1000;
+}
+
+const toInput = (value: string | number | null | undefined) => (value === null || value === undefined ? "" : String(value));
+const toDateInput = (value: string | Date | null | undefined) => (value ? new Date(value).toISOString().slice(0, 10) : "");
+const capitalize = (value: string | null | undefined, fallback: string) =>
+  value ? value.charAt(0).toUpperCase() + value.slice(1) : fallback;
+
 type OrderItemForm = {
+  id?: number;
+  images: string[];
   itemName: string;
   vendorId: string;
   estimatedLabourCharges: string;
@@ -61,6 +90,7 @@ type OrderItemForm = {
 };
 
 const emptyItem: OrderItemForm = {
+  images: [],
   itemName: "",
   vendorId: "",
   estimatedLabourCharges: "",
@@ -81,16 +111,20 @@ const emptyItem: OrderItemForm = {
 };
 
 type AdvanceMetalForm = {
+  id?: number;
   itemName: string;
   receivedDate: string;
   weight: string;
   alloy: string;
+  wastage: string;
+  wastageType: "percent" | "ratti";
   netWeightRate: string;
   value: string;
   comments: string;
 };
 
 type AdvanceGemForm = {
+  id?: number;
   itemName: string;
   qty: string;
   weight: string;
@@ -110,6 +144,9 @@ type NewCustomerForm = {
 export default function CreateOrder() {
   const [, setLocation] = useLocation();
   const utils = trpc.useUtils();
+  const params = useParams<{ id?: string }>();
+  const editId = params.id ? Number(params.id) : null;
+  const isEdit = Boolean(editId);
 
   // Form state
   const [orderForm, setOrderForm] = useState({
@@ -142,6 +179,7 @@ export default function CreateOrder() {
   const [showAddGem, setShowAddGem] = useState(false);
   const [newGemName, setNewGemName] = useState("");
   const [gemForItemIdx, setGemForItemIdx] = useState<number | null>(null);
+  const [gemForAdvanceIdx, setGemForAdvanceIdx] = useState<number | null>(null);
 
   const defaultGems = [
     "Diamond", "Ruby", "Emerald", "Sapphire", "Pearl", "Topaz", "Amethyst",
@@ -160,15 +198,109 @@ export default function CreateOrder() {
     if (gemForItemIdx !== null) {
       updateItem(gemForItemIdx, "estimatedGemType", newGemName.trim());
     }
+    if (gemForAdvanceIdx !== null) {
+      const name = newGemName.trim();
+      setAdvanceGems(prev => prev.map((gem, i) => (i === gemForAdvanceIdx ? { ...gem, itemName: name } : gem)));
+    }
     setNewGemName("");
     setShowAddGem(false);
     setGemForItemIdx(null);
+    setGemForAdvanceIdx(null);
     toast.success(`"${newGemName.trim()}" added to gem list`);
   };
 
   // Data queries
   const { data: customers } = trpc.customers.list.useQuery();
   const { data: vendors } = trpc.vendors.list.useQuery();
+
+  // ---- Edit mode: load the existing order once and fill the card
+  const { data: editing, isLoading: editingLoading } = trpc.orderDetail.get.useQuery(
+    { id: editId ?? 0 },
+    { enabled: isEdit }
+  );
+  const [prefilled, setPrefilled] = useState(false);
+  const invoiced = Boolean(editing?.invoices?.some((invoice: any) => invoice.status !== "cancelled"));
+  const locked = isEdit && invoiced;
+
+  useEffect(() => {
+    if (!editing || prefilled) return;
+    const order = editing.order;
+    setOrderForm({
+      customerId: order.customerId ?? null,
+      orderDate: toDateInput(order.orderDate) || new Date().toISOString().split("T")[0],
+      deliveryDate: toDateInput(order.expectedDelivery),
+      description: order.description ?? "",
+      comments: order.notes ?? "",
+      advanceCash: Number(order.advanceCash || 0) > 0 ? toInput(order.advanceCash) : "",
+    });
+    setOrderItems(
+      editing.items.length
+        ? editing.items.map((item: any) => ({
+            id: item.id,
+            images: item.images ?? [],
+            itemName: item.itemName ?? "",
+            vendorId: item.vendorId ? String(item.vendorId) : "",
+            estimatedLabourCharges: toInput(item.estimatedLabourCharges),
+            bodyMakingRate: capitalize(item.bodyMakingRateType, "Simple"),
+            stoneSettingRate: capitalize(item.stoneSettingRateType, "Simple"),
+            estimatedMetalType: item.estimatedMetalType ?? "Gold 22k",
+            estimatedMetalWeight: toInput(item.estimatedMetalWeight),
+            estimatedMetalWastage: toInput(item.estimatedMetalWastage),
+            estimatedMetalRate: toInput(item.estimatedMetalRate),
+            estimatedMetalValue: toInput(item.estimatedMetalValue),
+            estimatedGemType: item.estimatedGemType ?? "",
+            estimatedGemQty: toInput(item.estimatedGemQty),
+            estimatedGemWeight: toInput(item.estimatedGemWeight),
+            estimatedGemRate: toInput(item.estimatedGemRate),
+            estimatedGemCalcBy: item.estimatedGemCalcBy || "Weight",
+            estimatedGemValue: toInput(item.estimatedGemValue),
+            comments: item.comments ?? "",
+          }))
+        : [{ ...emptyItem }]
+    );
+    setAdvanceMetals(
+      editing.advanceMetals.map((metal: any) => ({
+        id: metal.id,
+        itemName: metal.itemName ?? "",
+        receivedDate: toDateInput(metal.receivedDate),
+        weight: toInput(metal.weight),
+        alloy: metal.alloy ?? "",
+        wastage: toInput(metal.wastage),
+        wastageType: metal.wastageType === "ratti" ? "ratti" : "percent",
+        netWeightRate: toInput(metal.netWeightRate),
+        value: toInput(metal.value),
+        comments: metal.comments ?? "",
+      }))
+    );
+    setAdvanceGems(
+      editing.advanceGems.map((gem: any) => ({
+        id: gem.id,
+        itemName: gem.itemName ?? "",
+        qty: toInput(gem.qty),
+        weight: toInput(gem.weight),
+        comments: gem.comments ?? "",
+      }))
+    );
+    const knownGems = new Set(allGems);
+    const extraGems = [
+      ...editing.items.map((item: any) => item.estimatedGemType),
+      ...editing.advanceGems.map((gem: any) => gem.itemName),
+    ].filter((gem: string | null) => gem && !knownGems.has(gem) && gem !== "Other") as string[];
+    if (extraGems.length) setCustomGems(prev => Array.from(new Set([...prev, ...extraGems])));
+    setPrefilled(true);
+  }, [editing, prefilled]);
+
+  const editMutation = trpc.orders.edit.useMutation({
+    onSuccess: () => {
+      toast.success("Order updated");
+      utils.orders.list.invalidate();
+      utils.orderDetail.get.invalidate();
+      setLocation(`/orders/${editId}`);
+    },
+    onError: (error) => {
+      toast.error(error.message || "Failed to update order");
+    },
+  });
 
   // Mutations
   const createMutation = trpc.orders.create.useMutation({
@@ -252,6 +384,8 @@ export default function CreateOrder() {
     const items = orderItems
       .filter((item) => item.itemName)
       .map((item) => ({
+        id: item.id,
+        images: item.images,
         itemName: item.itemName,
         vendorId: item.vendorId ? Number(item.vendorId) : undefined,
         quantity: 1,
@@ -286,13 +420,51 @@ export default function CreateOrder() {
     const totalWeight = items.reduce((sum, item) => sum + Number(item.estimatedMetalWeight || 0), 0);
     const validAdvanceMetals = advanceMetals
       .filter((metal) => metal.itemName || metal.weight || metal.value)
-      .map((metal) => ({ ...metal }));
+      .map((metal) => ({
+        id: metal.id,
+        itemName: metal.itemName || undefined,
+        receivedDate: metal.receivedDate || undefined,
+        weight: metal.weight || undefined,
+        alloy: metal.alloy || undefined,
+        wastage: metal.wastage || undefined,
+        wastageType: metal.wastageType,
+        netWeightRate: metal.netWeightRate || undefined,
+        value: metal.value || undefined,
+        comments: metal.comments || undefined,
+      }));
     const validAdvanceGems = advanceGems
       .filter((gem) => gem.itemName || gem.qty || gem.weight)
       .map((gem) => ({
-        ...gem,
+        id: gem.id,
+        itemName: gem.itemName || undefined,
         qty: gem.qty ? Number(gem.qty) : undefined,
+        weight: gem.weight || undefined,
+        comments: gem.comments || undefined,
       }));
+
+    if (isEdit && editId) {
+      editMutation.mutate({
+        id: editId,
+        customerId: orderForm.customerId,
+        orderDate: orderForm.orderDate || undefined,
+        expectedDelivery: orderForm.deliveryDate || undefined,
+        notes: orderForm.comments || undefined,
+        description: orderForm.description || undefined,
+        advanceCash: orderForm.advanceCash || "0",
+        status: saveAsDraft ? "saved" : undefined,
+        ...(locked
+          ? {}
+          : {
+              totalItems: items.length,
+              totalWeight: totalWeight.toFixed(3),
+              totalPrice: totalPrice.toFixed(2),
+              items,
+              advanceMetals: validAdvanceMetals,
+              advanceGems: validAdvanceGems,
+            }),
+      });
+      return;
+    }
 
     createMutation.mutate({
       customerId: orderForm.customerId,
@@ -339,20 +511,67 @@ export default function CreateOrder() {
     });
   };
 
+  const updateMetal = (idx: number, field: keyof AdvanceMetalForm, value: string) => {
+    setAdvanceMetals((prev) => {
+      const updated = [...prev];
+      const metal = { ...updated[idx], [field]: value } as AdvanceMetalForm;
+      if (["weight", "wastage", "wastageType", "netWeightRate"].includes(field)) {
+        const net = metalNetWeight(metal.weight, metal.wastage, metal.wastageType);
+        const rate = parseFloat(metal.netWeightRate) || 0;
+        if (net > 0 && rate > 0) metal.value = (net * rate).toFixed(2);
+      }
+      updated[idx] = metal;
+      return updated;
+    });
+  };
+
+  const updateGem = (idx: number, field: keyof AdvanceGemForm, value: string) => {
+    setAdvanceGems((prev) => prev.map((gem, i) => (i === idx ? { ...gem, [field]: value } : gem)));
+  };
+
+  const itemTypeOptions = Array.from(new Set([...itemTypes, ...orderItems.map((item) => item.itemName).filter(Boolean)]));
+  const metalOptions = Array.from(new Set([...advanceMetalTypes, ...advanceMetals.map((metal) => metal.itemName).filter(Boolean)]));
+  const isSaving = createMutation.isPending || editMutation.isPending;
+
   const selectedCustomer = customers?.find((c) => c.id === orderForm.customerId);
+
+  if (isEdit && (editingLoading || (editing && !prefilled))) {
+    return (
+      <div className="flex items-center justify-center py-16">
+        <div className="w-10 h-10 rounded-full border-4 border-primary border-t-transparent animate-spin" />
+      </div>
+    );
+  }
+  if (isEdit && !editing) {
+    return <div className="py-16 text-center text-muted-foreground">Order not found</div>;
+  }
 
   return (
     <div className="space-y-6 animate-fadeIn pb-8">
       {/* Header */}
       <div className="flex items-center gap-4">
-        <Button variant="ghost" size="icon" onClick={() => setLocation("/orders")} className="shrink-0">
+        <Button variant="ghost" size="icon" onClick={() => setLocation(isEdit ? `/orders/${editId}` : "/orders")} className="shrink-0">
           <ArrowLeft className="h-5 w-5" />
         </Button>
         <div className="flex-1">
-          <h1 className="text-2xl font-semibold text-foreground">Sales Order Card</h1>
-          <p className="text-sm text-muted-foreground mt-0.5">Create a new sales order with items and vendor assignments</p>
+          <h1 className="text-2xl font-semibold text-foreground">
+            {isEdit ? `Edit Sales Order ${editing?.order.orderNumber ?? ""}` : "Sales Order Card"}
+          </h1>
+          <p className="text-sm text-muted-foreground mt-0.5">
+            {isEdit ? "Update the order, its items, advances and photos" : "Create a new sales order with items and vendor assignments"}
+          </p>
         </div>
       </div>
+
+      {locked && (
+        <div className="flex items-start gap-3 rounded-xl border border-amber-500/30 bg-amber-500/10 p-4 text-sm">
+          <Lock className="mt-0.5 h-4 w-4 shrink-0 text-amber-600" />
+          <p className="text-foreground">
+            This order already has an invoice, so the customer, advance cash, items and advances are locked.
+            Cancel the invoice first to change them. Dates, description and comments can still be edited.
+          </p>
+        </div>
+      )}
 
       {/* ============ CUSTOMER & ORDER DETAILS ============ */}
       <div className="rounded-xl bg-card border border-border overflow-hidden">
@@ -367,6 +586,7 @@ export default function CreateOrder() {
               <Select
                 value={orderForm.customerId?.toString() || ""}
                 onValueChange={(v) => setOrderForm({ ...orderForm, customerId: v ? Number(v) : null })}
+                disabled={locked}
               >
                 <SelectTrigger className="bg-input border-border flex-1">
                   <SelectValue placeholder="Select a customer" />
@@ -379,7 +599,7 @@ export default function CreateOrder() {
                   ))}
                 </SelectContent>
               </Select>
-              <Button variant="outline" size="icon" onClick={() => setShowNewCustomer(true)} title="Add New Customer">
+              <Button variant="outline" size="icon" onClick={() => setShowNewCustomer(true)} title="Add New Customer" disabled={locked}>
                 <UserPlus className="h-4 w-4" />
               </Button>
             </div>
@@ -389,21 +609,11 @@ export default function CreateOrder() {
           <div className="grid grid-cols-2 gap-6">
             <div className="grid grid-cols-[140px_1fr] items-center gap-4">
               <Label className="text-sm font-medium text-foreground">Order Date</Label>
-              <Input
-                type="date"
-                value={orderForm.orderDate}
-                onChange={(e) => setOrderForm({ ...orderForm, orderDate: e.target.value })}
-                className="bg-input border-border"
-              />
+              <DateInput value={orderForm.orderDate} onChange={value => setOrderForm({ ...orderForm, orderDate: value })} className="" />
             </div>
             <div className="grid grid-cols-[140px_1fr] items-center gap-4">
               <Label className="text-sm font-medium text-foreground">Delivery Date</Label>
-              <Input
-                type="date"
-                value={orderForm.deliveryDate}
-                onChange={(e) => setOrderForm({ ...orderForm, deliveryDate: e.target.value })}
-                className="bg-input border-border"
-              />
+              <DateInput value={orderForm.deliveryDate} onChange={value => setOrderForm({ ...orderForm, deliveryDate: value })} className="" />
             </div>
           </div>
 
@@ -439,12 +649,14 @@ export default function CreateOrder() {
               value={orderForm.advanceCash}
               onChange={(e) => setOrderForm({ ...orderForm, advanceCash: e.target.value })}
               placeholder="0.00"
+              disabled={locked}
               className="bg-input border-border max-w-xs"
             />
           </div>
         </div>
       </div>
 
+      <fieldset disabled={locked} className="m-0 min-w-0 space-y-6 border-0 p-0">
       {/* ============ ADVANCE METALS ============ */}
       <div className="rounded-xl bg-card border border-border overflow-hidden">
         <div className="px-5 py-3 bg-amber-500/10 dark:bg-amber-500/5 border-b border-border flex items-center justify-between">
@@ -456,10 +668,11 @@ export default function CreateOrder() {
             variant="ghost"
             size="sm"
             className="h-7 text-xs"
+            disabled={locked}
             onClick={() =>
               setAdvanceMetals([
                 ...advanceMetals,
-                { itemName: "", receivedDate: "", weight: "", alloy: "", netWeightRate: "", value: "", comments: "" },
+                { itemName: "", receivedDate: "", weight: "", wastage: "", wastageType: "percent", alloy: "", netWeightRate: "", value: "", comments: "" },
               ])
             }
           >
@@ -471,98 +684,76 @@ export default function CreateOrder() {
           <table className="w-full text-sm">
             <thead>
               <tr className="border-b border-border bg-muted/30">
-                <th className="px-4 py-2.5 text-left font-medium text-muted-foreground">Items</th>
-                <th className="px-4 py-2.5 text-left font-medium text-muted-foreground">Recv. Date</th>
-                <th className="px-4 py-2.5 text-left font-medium text-muted-foreground">Weight (gm)</th>
-                <th className="px-4 py-2.5 text-left font-medium text-muted-foreground">Alloy</th>
-                <th className="px-4 py-2.5 text-left font-medium text-muted-foreground">Net.Wgt Rate</th>
-                <th className="px-4 py-2.5 text-left font-medium text-muted-foreground">Value</th>
-                <th className="px-4 py-2.5 text-left font-medium text-muted-foreground">Comments</th>
-                <th className="px-4 py-2.5 w-10"></th>
+                <th className="px-3 py-2.5 text-left font-medium text-muted-foreground min-w-[140px]">Metal</th>
+                <th className="px-3 py-2.5 text-left font-medium text-muted-foreground min-w-[140px]">Recv. Date</th>
+                <th className="px-3 py-2.5 text-left font-medium text-muted-foreground min-w-[110px]">Weight (gm)</th>
+                <th className="px-3 py-2.5 text-left font-medium text-muted-foreground min-w-[170px]">Wastage</th>
+                <th className="px-3 py-2.5 text-left font-medium text-muted-foreground min-w-[100px]">Net Wt (gm)</th>
+                <th className="px-3 py-2.5 text-left font-medium text-muted-foreground">Alloy</th>
+                <th className="px-3 py-2.5 text-left font-medium text-muted-foreground min-w-[100px]">Rate / gm</th>
+                <th className="px-3 py-2.5 text-left font-medium text-muted-foreground min-w-[110px]">Value</th>
+                <th className="px-3 py-2.5 text-left font-medium text-muted-foreground">Comments</th>
+                <th className="px-3 py-2.5 w-10"></th>
               </tr>
             </thead>
             <tbody>
               {advanceMetals.length === 0 ? (
                 <tr>
-                  <td colSpan={8} className="px-4 py-6 text-center text-muted-foreground text-xs italic">
+                  <td colSpan={10} className="px-4 py-6 text-center text-muted-foreground text-xs italic">
                     No advance metals added. Click "Add More" to add entries.
                   </td>
                 </tr>
               ) : (
-                advanceMetals.map((metal, idx) => (
-                  <tr key={idx} className="border-b border-border/50">
+                advanceMetals.map((metal, idx) => {
+                  const net = metalNetWeight(metal.weight, metal.wastage, metal.wastageType);
+                  return (
+                  <tr key={metal.id ?? `new-${idx}`} className="border-b border-border/50">
                     <td className="px-3 py-1.5">
-                      <Input
-                        value={metal.itemName}
-                        onChange={(e) => {
-                          const u = [...advanceMetals]; u[idx].itemName = e.target.value; setAdvanceMetals(u);
-                        }}
-                        className="bg-input border-border h-8 text-xs"
-                        placeholder="Gold 22k"
-                      />
+                      <Select value={metal.itemName} onValueChange={(v) => updateMetal(idx, "itemName", v)} disabled={locked}>
+                        <SelectTrigger className="bg-input border-border h-8 text-xs">
+                          <SelectValue placeholder="Select metal" />
+                        </SelectTrigger>
+                        <SelectContent className="max-h-60">
+                          {metalOptions.map((m) => (
+                            <SelectItem key={m} value={m}>{m}</SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
                     </td>
                     <td className="px-3 py-1.5">
-                      <Input
-                        type="date"
-                        value={metal.receivedDate}
-                        onChange={(e) => {
-                          const u = [...advanceMetals]; u[idx].receivedDate = e.target.value; setAdvanceMetals(u);
-                        }}
-                        className="bg-input border-border h-8 text-xs"
-                      />
+                      <DateInput value={metal.receivedDate} onChange={(value) => updateMetal(idx, "receivedDate", value)} className="h-8 text-xs" disabled={locked} />
                     </td>
                     <td className="px-3 py-1.5">
-                      <Input
-                        type="number"
-                        value={metal.weight}
-                        onChange={(e) => {
-                          const u = [...advanceMetals]; u[idx].weight = e.target.value; setAdvanceMetals(u);
-                        }}
-                        className="bg-input border-border h-8 text-xs"
-                        placeholder="0.000"
-                      />
+                      <Input type="number" step="0.001" value={metal.weight} onChange={(e) => updateMetal(idx, "weight", e.target.value)} className="bg-input border-border h-8 text-xs" placeholder="0.000" />
                     </td>
                     <td className="px-3 py-1.5">
-                      <Input
-                        value={metal.alloy}
-                        onChange={(e) => {
-                          const u = [...advanceMetals]; u[idx].alloy = e.target.value; setAdvanceMetals(u);
-                        }}
-                        className="bg-input border-border h-8 text-xs"
-                        placeholder="22k"
-                      />
+                      <div className="flex gap-1">
+                        <Input type="number" step="0.01" value={metal.wastage} onChange={(e) => updateMetal(idx, "wastage", e.target.value)} className="bg-input border-border h-8 text-xs w-20" placeholder="0" />
+                        <Select value={metal.wastageType} onValueChange={(v) => updateMetal(idx, "wastageType", v)} disabled={locked}>
+                          <SelectTrigger className="bg-input border-border h-8 text-xs w-[84px]">
+                            <SelectValue />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="percent">%</SelectItem>
+                            <SelectItem value="ratti">Ratti</SelectItem>
+                          </SelectContent>
+                        </Select>
+                      </div>
                     </td>
                     <td className="px-3 py-1.5">
-                      <Input
-                        type="number"
-                        value={metal.netWeightRate}
-                        onChange={(e) => {
-                          const u = [...advanceMetals]; u[idx].netWeightRate = e.target.value; setAdvanceMetals(u);
-                        }}
-                        className="bg-input border-border h-8 text-xs"
-                        placeholder="0"
-                      />
+                      <Input value={net > 0 ? net.toFixed(3) : ""} readOnly className="bg-muted/50 border-border h-8 text-xs font-medium" placeholder="0.000" />
                     </td>
                     <td className="px-3 py-1.5">
-                      <Input
-                        type="number"
-                        value={metal.value}
-                        onChange={(e) => {
-                          const u = [...advanceMetals]; u[idx].value = e.target.value; setAdvanceMetals(u);
-                        }}
-                        className="bg-input border-border h-8 text-xs"
-                        placeholder="0"
-                      />
+                      <Input value={metal.alloy} onChange={(e) => updateMetal(idx, "alloy", e.target.value)} className="bg-input border-border h-8 text-xs" placeholder="22k" />
                     </td>
                     <td className="px-3 py-1.5">
-                      <Input
-                        value={metal.comments}
-                        onChange={(e) => {
-                          const u = [...advanceMetals]; u[idx].comments = e.target.value; setAdvanceMetals(u);
-                        }}
-                        className="bg-input border-border h-8 text-xs"
-                        placeholder="Notes"
-                      />
+                      <Input type="number" value={metal.netWeightRate} onChange={(e) => updateMetal(idx, "netWeightRate", e.target.value)} className="bg-input border-border h-8 text-xs" placeholder="0" />
+                    </td>
+                    <td className="px-3 py-1.5">
+                      <Input type="number" value={metal.value} onChange={(e) => updateMetal(idx, "value", e.target.value)} className="bg-input border-border h-8 text-xs" placeholder="0" />
+                    </td>
+                    <td className="px-3 py-1.5">
+                      <Input value={metal.comments} onChange={(e) => updateMetal(idx, "comments", e.target.value)} className="bg-input border-border h-8 text-xs" placeholder="Notes" />
                     </td>
                     <td className="px-2 py-1.5">
                       <Button
@@ -575,11 +766,15 @@ export default function CreateOrder() {
                       </Button>
                     </td>
                   </tr>
-                ))
+                  );
+                })
               )}
             </tbody>
           </table>
         </div>
+        <p className="px-5 py-2 text-[11px] text-muted-foreground border-t border-border/50">
+          Net weight = weight + wastage. Ratti wastage is per tola (1 tola = 11.664 gm = 96 ratti).
+        </p>
       </div>
 
       {/* ============ ADVANCE GEMS ============ */}
@@ -593,6 +788,7 @@ export default function CreateOrder() {
             variant="ghost"
             size="sm"
             className="h-7 text-xs"
+            disabled={locked}
             onClick={() =>
               setAdvanceGems([...advanceGems, { itemName: "", qty: "", weight: "", comments: "" }])
             }
@@ -605,7 +801,7 @@ export default function CreateOrder() {
           <table className="w-full text-sm">
             <thead>
               <tr className="border-b border-border bg-muted/30">
-                <th className="px-4 py-2.5 text-left font-medium text-muted-foreground">Items</th>
+                <th className="px-4 py-2.5 text-left font-medium text-muted-foreground min-w-[200px]">Items</th>
                 <th className="px-4 py-2.5 text-left font-medium text-muted-foreground">Qty</th>
                 <th className="px-4 py-2.5 text-left font-medium text-muted-foreground">Weight</th>
                 <th className="px-4 py-2.5 text-left font-medium text-muted-foreground">Comments</th>
@@ -621,48 +817,38 @@ export default function CreateOrder() {
                 </tr>
               ) : (
                 advanceGems.map((gem, idx) => (
-                  <tr key={idx} className="border-b border-border/50">
+                  <tr key={gem.id ?? `new-${idx}`} className="border-b border-border/50">
                     <td className="px-3 py-1.5">
-                      <Input
-                        value={gem.itemName}
-                        onChange={(e) => {
-                          const u = [...advanceGems]; u[idx].itemName = e.target.value; setAdvanceGems(u);
-                        }}
-                        className="bg-input border-border h-8 text-xs"
-                        placeholder="Emeralds - 01"
-                      />
+                      <div className="flex gap-1">
+                        <Select value={gem.itemName} onValueChange={(v) => updateGem(idx, "itemName", v)} disabled={locked}>
+                          <SelectTrigger className="bg-input border-border h-8 text-xs flex-1">
+                            <SelectValue placeholder="Select gem" />
+                          </SelectTrigger>
+                          <SelectContent className="max-h-60">
+                            {Array.from(new Set([...allGems, ...(gem.itemName ? [gem.itemName] : [])])).map((name) => (
+                              <SelectItem key={name} value={name}>{name}</SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                        <Button
+                          variant="outline"
+                          size="icon"
+                          className="h-8 w-8 shrink-0"
+                          title="Add new gem"
+                          onClick={() => { setGemForAdvanceIdx(idx); setGemForItemIdx(null); setShowAddGem(true); }}
+                        >
+                          <Plus className="h-3.5 w-3.5" />
+                        </Button>
+                      </div>
                     </td>
                     <td className="px-3 py-1.5">
-                      <Input
-                        type="number"
-                        value={gem.qty}
-                        onChange={(e) => {
-                          const u = [...advanceGems]; u[idx].qty = e.target.value; setAdvanceGems(u);
-                        }}
-                        className="bg-input border-border h-8 text-xs"
-                        placeholder="0"
-                      />
+                      <Input type="number" value={gem.qty} onChange={(e) => updateGem(idx, "qty", e.target.value)} className="bg-input border-border h-8 text-xs" placeholder="0" />
                     </td>
                     <td className="px-3 py-1.5">
-                      <Input
-                        type="number"
-                        value={gem.weight}
-                        onChange={(e) => {
-                          const u = [...advanceGems]; u[idx].weight = e.target.value; setAdvanceGems(u);
-                        }}
-                        className="bg-input border-border h-8 text-xs"
-                        placeholder="0.000"
-                      />
+                      <Input type="number" value={gem.weight} onChange={(e) => updateGem(idx, "weight", e.target.value)} className="bg-input border-border h-8 text-xs" placeholder="0.000" />
                     </td>
                     <td className="px-3 py-1.5">
-                      <Input
-                        value={gem.comments}
-                        onChange={(e) => {
-                          const u = [...advanceGems]; u[idx].comments = e.target.value; setAdvanceGems(u);
-                        }}
-                        className="bg-input border-border h-8 text-xs"
-                        placeholder="Notes"
-                      />
+                      <Input value={gem.comments} onChange={(e) => updateGem(idx, "comments", e.target.value)} className="bg-input border-border h-8 text-xs" placeholder="Notes" />
                     </td>
                     <td className="px-2 py-1.5">
                       <Button
@@ -693,7 +879,8 @@ export default function CreateOrder() {
             variant="ghost"
             size="sm"
             className="h-7 text-xs"
-            onClick={() => setOrderItems([...orderItems, { ...emptyItem }])}
+            disabled={locked}
+            onClick={() => setOrderItems([...orderItems, { ...emptyItem, images: [] }])}
           >
             <Plus className="h-3.5 w-3.5 mr-1" />
             Add Item
@@ -702,7 +889,7 @@ export default function CreateOrder() {
 
         <div className="divide-y divide-border">
           {orderItems.map((item, idx) => (
-            <div key={idx} className="p-5 space-y-4">
+            <div key={item.id ?? `new-${idx}`} className="p-5 space-y-4">
               {/* Item Header */}
               <div className="flex items-center justify-between">
                 <span className="text-sm font-semibold text-foreground">
@@ -725,12 +912,12 @@ export default function CreateOrder() {
               <div className="grid grid-cols-4 gap-4">
                 <div className="space-y-1.5">
                   <Label className="text-xs text-muted-foreground">Item Type *</Label>
-                  <Select value={item.itemName} onValueChange={(v) => updateItem(idx, "itemName", v)}>
+                  <Select value={item.itemName} onValueChange={(v) => updateItem(idx, "itemName", v)} disabled={locked}>
                     <SelectTrigger className="bg-input border-border h-9">
                       <SelectValue placeholder="Select item" />
                     </SelectTrigger>
                     <SelectContent>
-                      {itemTypes.map((t) => (
+                      {itemTypeOptions.map((t) => (
                         <SelectItem key={t} value={t}>{t}</SelectItem>
                       ))}
                     </SelectContent>
@@ -963,10 +1150,24 @@ export default function CreateOrder() {
                   />
                 </div>
               </div>
+
+              {/* Item Images */}
+              <div className="space-y-1.5">
+                <Label className="text-xs text-muted-foreground flex items-center gap-1.5">
+                  <ImageIcon className="h-3.5 w-3.5" /> Design Images (shown on the invoice)
+                </Label>
+                <ImageUploader
+                  images={item.images}
+                  disabled={locked}
+                  onChange={(images) => setOrderItems((prev) => prev.map((it, i) => (i === idx ? { ...it, images } : it)))}
+                />
+              </div>
             </div>
           ))}
         </div>
       </div>
+
+      </fieldset>
 
       {/* ============ ACTION BUTTONS ============ */}
       <div className="flex items-center justify-between rounded-xl bg-card border border-border p-5">
@@ -985,21 +1186,27 @@ export default function CreateOrder() {
           )}
         </div>
         <div className="flex gap-3">
-          <Button
-            variant="outline"
-            onClick={() => handleSubmit(true)}
-            disabled={createMutation.isPending}
-          >
-            <Save className="h-4 w-4 mr-2" />
-            Save & Continue Later
-          </Button>
+          {isEdit ? (
+            <Button variant="outline" onClick={() => setLocation(`/orders/${editId}`)} disabled={isSaving}>
+              Cancel
+            </Button>
+          ) : (
+            <Button
+              variant="outline"
+              onClick={() => handleSubmit(true)}
+              disabled={isSaving}
+            >
+              <Save className="h-4 w-4 mr-2" />
+              Save & Continue Later
+            </Button>
+          )}
           <Button
             onClick={() => handleSubmit(false)}
-            disabled={createMutation.isPending}
+            disabled={isSaving}
             className="gold-gradient text-primary-foreground border-0"
           >
             <CheckCircle className="h-4 w-4 mr-2" />
-            Create Order
+            {isEdit ? "Save Changes" : "Create Order"}
           </Button>
         </div>
       </div>

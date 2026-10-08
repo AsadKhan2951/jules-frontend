@@ -1,4 +1,6 @@
 import { trpc } from "@/lib/trpc";
+import { DateInput } from "@/components/DateInput";
+import { InvoiceViewDialog } from "@/components/InvoiceViewDialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -104,6 +106,8 @@ export default function OrderDetail() {
   const [showProcessDetailModal, setShowProcessDetailModal] = useState(false);
   const [selectedProcess, setSelectedProcess] = useState<any>(null);
   const [showInvoiceModal, setShowInvoiceModal] = useState(false);
+  const [viewInvoiceId, setViewInvoiceId] = useState<number | null>(null);
+  const [confirmCancel, setConfirmCancel] = useState(false);
   const [deleteProcessConfirm, setDeleteProcessConfirm] = useState<number | null>(null);
   const [showAddVendorModal, setShowAddVendorModal] = useState(false);
 
@@ -301,6 +305,10 @@ export default function OrderDetail() {
   };
 
   const handleStatusChange = (newStatus: string) => {
+    if (newStatus === "cancelled") {
+      setConfirmCancel(true);
+      return;
+    }
     updateOrderMutation.mutate({ id: orderId, status: newStatus as any });
   };
 
@@ -361,7 +369,13 @@ export default function OrderDetail() {
           </p>
         </div>
         <div className="flex items-center gap-2">
-          <Select value={order.status || 'pending'} onValueChange={handleStatusChange}>
+          {order.status !== 'cancelled' && (
+            <Button variant="outline" size="sm" onClick={() => setLocation(`/orders/${orderId}/edit`)}>
+              <Pencil className="h-4 w-4 mr-1" />
+              Edit Order
+            </Button>
+          )}
+          <Select value={order.status || 'pending'} onValueChange={handleStatusChange} disabled={order.status === 'cancelled' || updateOrderMutation.isPending}>
             <SelectTrigger className="w-[160px] bg-card border-border h-9">
               <SelectValue />
             </SelectTrigger>
@@ -494,7 +508,21 @@ export default function OrderDetail() {
                   <tbody>
                     {orderDetail.items.map((item: any, idx: number) => (
                       <tr key={item.id || idx} className="border-b border-border/50 hover:bg-muted/20">
-                        <td className="px-5 py-3 font-medium text-foreground">{item.itemName || `Item #${idx + 1}`}</td>
+                        <td className="px-5 py-3 font-medium text-foreground">
+                          <div className="flex items-center gap-3">
+                            {item.images?.length ? (
+                              <a href={item.images[0]} target="_blank" rel="noreferrer" className="relative shrink-0">
+                                <img src={item.images[0]} alt={item.itemName || "Item"} className="h-10 w-10 rounded-md border border-border object-cover" />
+                                {item.images.length > 1 && (
+                                  <span className="absolute -right-1.5 -top-1.5 rounded-full bg-primary px-1.5 text-[10px] text-primary-foreground">
+                                    {item.images.length}
+                                  </span>
+                                )}
+                              </a>
+                            ) : null}
+                            <span>{item.itemName || `Item #${idx + 1}`}</span>
+                          </div>
+                        </td>
                         <td className="px-5 py-3 text-muted-foreground">
                           {orderDetail.processes?.find((process: any) => process.process.orderItemId === item.id)?.vendor?.name || "—"}
                         </td>
@@ -691,6 +719,7 @@ export default function OrderDetail() {
                           <span className={`inline-flex px-2 py-0.5 rounded-full text-xs font-medium ${
                             inv.status === 'paid' ? 'bg-emerald-500/15 text-emerald-600 dark:text-emerald-400' :
                             inv.status === 'sent' ? 'bg-blue-500/15 text-blue-600 dark:text-blue-400' :
+                            inv.status === 'cancelled' ? 'bg-rose-500/15 text-rose-600 dark:text-rose-400' :
                             'bg-zinc-500/15 text-zinc-600 dark:text-zinc-400'
                           }`}>
                             {inv.status || 'Draft'}
@@ -699,7 +728,7 @@ export default function OrderDetail() {
                         <td className="px-5 py-3 text-right font-medium text-foreground">{formatCurrency(inv.totalAmount)}</td>
                         <td className="px-5 py-3 text-right">
                           <Button variant="ghost" size="sm" className="h-7 text-xs"
-                            onClick={() => setLocation(`/orders/${orderId}`)}
+                            onClick={() => setViewInvoiceId(inv.id)}
                           >
                             View
                           </Button>
@@ -784,21 +813,11 @@ export default function OrderDetail() {
             <div className="grid grid-cols-2 gap-4">
               <div className="space-y-2">
                 <Label className="text-foreground">Start Date</Label>
-                <Input
-                  type="date"
-                  value={processForm.startDate}
-                  onChange={(e) => setProcessForm({ ...processForm, startDate: e.target.value })}
-                  className="bg-input border-border"
-                />
+                <DateInput value={processForm.startDate} onChange={value => setProcessForm({ ...processForm, startDate: value })} className="" />
               </div>
               <div className="space-y-2">
                 <Label className="text-foreground">Expected Delivery</Label>
-                <Input
-                  type="date"
-                  value={processForm.expectedDeliveryDate}
-                  onChange={(e) => setProcessForm({ ...processForm, expectedDeliveryDate: e.target.value })}
-                  className="bg-input border-border"
-                />
+                <DateInput value={processForm.expectedDeliveryDate} onChange={value => setProcessForm({ ...processForm, expectedDeliveryDate: value })} className="" />
               </div>
             </div>
 
@@ -853,12 +872,7 @@ export default function OrderDetail() {
                   Close Process?
                 </label>
                 {processDetailForm.isClosed && (
-                  <Input
-                    type="date"
-                    value={processDetailForm.closedDate}
-                    onChange={(e) => setProcessDetailForm({ ...processDetailForm, closedDate: e.target.value })}
-                    className="bg-input border-border h-8 w-40"
-                  />
+                  <DateInput value={processDetailForm.closedDate} onChange={value => setProcessDetailForm({ ...processDetailForm, closedDate: value })} className="h-8 w-40" />
                 )}
               </div>
 
@@ -906,21 +920,11 @@ export default function OrderDetail() {
                 </div>
                 <div className="space-y-2">
                   <Label className="text-xs text-muted-foreground">Expected Delivery</Label>
-                  <Input
-                    type="date"
-                    value={selectedProcess.process.expectedDeliveryDate ? new Date(selectedProcess.process.expectedDeliveryDate).toISOString().split('T')[0] : ''}
-                    disabled
-                    className="bg-muted border-border h-9"
-                  />
+                  <DateInput value={selectedProcess.process.expectedDeliveryDate ? new Date(selectedProcess.process.expectedDeliveryDate).toISOString().split('T')[0] : ''} onChange={() => {}} disabled clearable={false} className="h-9" />
                 </div>
                 <div className="space-y-2">
                   <Label className="text-xs text-muted-foreground">Actual Delivery Date</Label>
-                  <Input
-                    type="date"
-                    value={processDetailForm.actualDeliveryDate}
-                    onChange={(e) => setProcessDetailForm({ ...processDetailForm, actualDeliveryDate: e.target.value })}
-                    className="bg-input border-border h-9"
-                  />
+                  <DateInput value={processDetailForm.actualDeliveryDate} onChange={value => setProcessDetailForm({ ...processDetailForm, actualDeliveryDate: value })} className="h-9" />
                 </div>
               </div>
 
@@ -1030,12 +1034,7 @@ export default function OrderDetail() {
                 <div className="grid grid-cols-3 gap-3 mt-3">
                   <div className="space-y-1.5">
                     <Label className="text-xs text-muted-foreground">Date</Label>
-                    <Input
-                      type="date"
-                      value={processDetailForm.gemsIssueDate}
-                      onChange={(e) => setProcessDetailForm({ ...processDetailForm, gemsIssueDate: e.target.value })}
-                      className="bg-input border-border h-9"
-                    />
+                    <DateInput value={processDetailForm.gemsIssueDate} onChange={value => setProcessDetailForm({ ...processDetailForm, gemsIssueDate: value })} className="h-9" />
                   </div>
                   <div className="space-y-1.5">
                     <Label className="text-xs text-muted-foreground">Weight</Label>
@@ -1207,6 +1206,36 @@ export default function OrderDetail() {
           </div>
         </DialogContent>
       </Dialog>
+
+      <InvoiceViewDialog
+        invoiceId={viewInvoiceId}
+        onClose={() => setViewInvoiceId(null)}
+        orderNumber={order.orderNumber}
+        customer={customer}
+        orderItems={orderDetail?.items ?? []}
+      />
+
+      {/* Cancel Order Confirmation */}
+      <AlertDialog open={confirmCancel} onOpenChange={setConfirmCancel}>
+        <AlertDialogContent className="bg-card border-border">
+          <AlertDialogHeader>
+            <AlertDialogTitle className="text-foreground">Cancel this order?</AlertDialogTitle>
+            <AlertDialogDescription className="text-muted-foreground">
+              The order will be hidden from the orders list, and its advance cash, advance metal and any invoice
+              postings will be reversed in the ledger. If an invoice is already posted, only a Super Admin can do this.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Keep Order</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={() => updateOrderMutation.mutate({ id: orderId, status: "cancelled" })}
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+            >
+              Cancel Order
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
 
       {/* Delete Process Confirmation */}
       <AlertDialog open={!!deleteProcessConfirm} onOpenChange={() => setDeleteProcessConfirm(null)}>
