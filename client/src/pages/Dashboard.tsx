@@ -1,15 +1,5 @@
 import { trpc } from "@/lib/trpc";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog";
 import { 
   BookOpen, 
   Package, 
@@ -29,8 +19,8 @@ import {
   BarChart3
 } from "lucide-react";
 import { useState, useEffect, useCallback } from "react";
-import { toast } from "sonner";
 import { useTheme } from "@/contexts/ThemeContext";
+import { GoldPriceDialog } from "@/components/GoldPriceDialog";
 
 // Custom event to open chat widget
 const openJulesBotChat = () => {
@@ -42,24 +32,12 @@ export default function Dashboard() {
   const isDark = theme === 'dark';
   const { data: stats, isLoading: statsLoading } = trpc.dashboard.stats.useQuery();
   const { data: goldPrice, isLoading: goldLoading, refetch: refetchGold } = trpc.goldPrice.getLatest.useQuery();
-  const { data: todayGold } = trpc.goldPrice.getToday.useQuery();
+  const { data: todayGold, isFetched: todayGoldFetched } = trpc.goldPrice.getToday.useQuery();
   const { data: greeting, isLoading: greetingLoading, refetch: refetchGreeting } = trpc.julesBot.getGreeting.useQuery();
   
   const [showGoldModal, setShowGoldModal] = useState(false);
-  const [price22k, setPrice22k] = useState("");
-  const [price24k, setPrice24k] = useState("");
   const [currentBulletin, setCurrentBulletin] = useState(0);
   
-  const setGoldPriceMutation = trpc.goldPrice.set.useMutation({
-    onSuccess: () => {
-      toast.success("Gold price updated successfully");
-      setShowGoldModal(false);
-      refetchGold();
-    },
-    onError: (error) => {
-      toast.error(error.message || "Failed to update gold price");
-    },
-  });
 
   // Parse greeting into bulletins
   const parseBulletins = useCallback(() => {
@@ -133,26 +111,10 @@ export default function Dashboard() {
 
   // Show gold price modal if no price set for today
   useEffect(() => {
-    if (!goldLoading && !todayGold) {
+    if (!goldLoading && todayGoldFetched && !todayGold) {
       setShowGoldModal(true);
     }
-  }, [goldLoading, todayGold]);
-
-  // Pre-fill with latest prices
-  useEffect(() => {
-    if (goldPrice) {
-      setPrice22k(goldPrice.price22k || "");
-      setPrice24k(goldPrice.price24k || "");
-    }
-  }, [goldPrice]);
-
-  const handleSaveGoldPrice = () => {
-    if (!price22k || !price24k) {
-      toast.error("Please enter both 22k and 24k gold prices");
-      return;
-    }
-    setGoldPriceMutation.mutate({ price22k, price24k });
-  };
+  }, [goldLoading, todayGoldFetched, todayGold]);
 
   const formatPrice = (price: string | null | undefined) => {
     if (!price) return "Not set";
@@ -354,7 +316,7 @@ export default function Dashboard() {
             </div>
           </div>
           
-          <div className="grid grid-cols-2 gap-4">
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
             <div className={`p-4 rounded-xl ${
               isDark ? 'bg-card/50 backdrop-blur border border-border' : 'bg-white border border-amber-100'
             }`}>
@@ -375,6 +337,19 @@ export default function Dashboard() {
               </div>
               <p className={`text-2xl font-bold ${isDark ? 'text-primary' : 'text-amber-600'}`}>
                 {goldLoading ? "..." : formatPrice(goldPrice?.price24k)}
+              </p>
+            </div>
+            <div className={`p-4 rounded-xl ${
+              isDark ? 'bg-card/50 backdrop-blur border border-border' : 'bg-white border border-amber-100'
+            }`}>
+              <div className="flex items-center justify-between mb-2">
+                <span className="text-sm text-muted-foreground">
+                  White Gold{goldPrice?.whiteGoldKarat ? ` (${String(goldPrice.whiteGoldKarat).toUpperCase()})` : ""}
+                </span>
+                <TrendingUp className={`h-4 w-4 ${isDark ? 'text-emerald-400' : 'text-emerald-500'}`} />
+              </div>
+              <p className={`text-2xl font-bold ${isDark ? 'text-foreground' : 'text-gray-700'}`}>
+                {goldLoading ? "..." : formatPrice(goldPrice?.whiteGoldPrice)}
               </p>
             </div>
           </div>
@@ -419,58 +394,7 @@ export default function Dashboard() {
         ))}
       </div>
 
-      {/* Gold Price Modal */}
-      <Dialog open={showGoldModal} onOpenChange={setShowGoldModal}>
-        <DialogContent className="sm:max-w-md bg-card border-border">
-          <DialogHeader>
-            <DialogTitle className="flex items-center gap-2 text-foreground">
-              <Coins className={`h-5 w-5 ${isDark ? 'text-primary' : 'text-amber-600'}`} />
-              Set Today's Gold Price
-            </DialogTitle>
-            <DialogDescription>
-              Enter the current gold prices per tola in PKR. This will affect all product pricing calculations.
-            </DialogDescription>
-          </DialogHeader>
-          
-          <div className="space-y-4 py-4">
-            <div className="space-y-2">
-              <Label htmlFor="price22k" className="text-foreground">22K Gold Price (PKR/Tola)</Label>
-              <Input
-                id="price22k"
-                type="number"
-                placeholder="e.g., 245000"
-                value={price22k}
-                onChange={(e) => setPrice22k(e.target.value)}
-                className="bg-background border-border"
-              />
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="price24k" className="text-foreground">24K Gold Price (PKR/Tola)</Label>
-              <Input
-                id="price24k"
-                type="number"
-                placeholder="e.g., 265000"
-                value={price24k}
-                onChange={(e) => setPrice24k(e.target.value)}
-                className="bg-background border-border"
-              />
-            </div>
-          </div>
-          
-          <DialogFooter className="gap-2">
-            <Button variant="outline" onClick={() => setShowGoldModal(false)}>
-              Not now
-            </Button>
-            <Button 
-              onClick={handleSaveGoldPrice}
-              disabled={setGoldPriceMutation.isPending}
-              className={isDark ? 'gold-gradient text-primary-foreground border-0' : 'bg-gray-900 hover:bg-gray-800 text-white border-0'}
-            >
-              {setGoldPriceMutation.isPending ? "Saving..." : "Save Price"}
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+      <GoldPriceDialog open={showGoldModal} onOpenChange={setShowGoldModal} />
     </div>
   );
 }

@@ -878,7 +878,7 @@ export default function Catalogs() {
                   >
                     {item.product.primaryImage ? (
                       <img 
-                        src={item.product.primaryImage} 
+                        src={item.product.thumbnail || item.product.primaryImage} loading="lazy" 
                         alt={item.product.name}
                         className="w-full h-full object-cover"
                       />

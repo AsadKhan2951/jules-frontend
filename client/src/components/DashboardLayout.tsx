@@ -67,7 +67,6 @@ import { trpc } from "@/lib/trpc";
 const menuItems = [
   { icon: LayoutDashboard, label: "Dashboard", path: "/", roles: ["admin"] },
   { icon: Package, label: "Products", path: "/products", roles: ["admin"] },
-  { icon: BookOpen, label: "Catalogs", path: "/catalogs", roles: ["admin"] },
   { icon: Users, label: "Customers", path: "/customers", roles: ["admin", "operations_finance"] },
   { icon: ShoppingCart, label: "Orders", path: "/orders", roles: ["admin", "operations_finance"] },
   { icon: ReceiptText, label: "Invoices", path: "/invoices", roles: ["admin", "operations_finance"] },
@@ -548,7 +547,7 @@ function DashboardLayoutContent({
                     className="flex items-center gap-3"
                   >
                     {product.product.primaryImage ? (
-                      <img src={product.product.primaryImage} alt="" className="w-8 h-8 rounded object-cover" />
+                      <img src={product.product.thumbnail || product.product.primaryImage} alt="" loading="lazy" className="w-8 h-8 rounded object-cover" />
                     ) : (
                       <div className="w-8 h-8 rounded bg-muted flex items-center justify-center">
                         <Package className="h-4 w-4 text-muted-foreground" />
@@ -557,7 +556,7 @@ function DashboardLayoutContent({
                     <div className="flex-1 min-w-0">
                       <p className="text-sm font-medium truncate">{product.product.name}</p>
                       <p className="text-xs text-muted-foreground">
-                        PKR {Number(product.product.basePrice || 0).toLocaleString()}
+                        PKR {Number(product.product.totalPrice || 0).toLocaleString()}
                       </p>
                     </div>
                   </CommandItem>
@@ -601,7 +600,7 @@ function DashboardLayoutContent({
                     key={`catalog-${catalog.catalog.id}`}
                     onSelect={() => {
                       setSearchOpen(false);
-                      setLocation("/catalogs");
+                      setLocation(catalog.catalog.customerId ? `/customers/${catalog.catalog.customerId}` : "/catalogs");
                     }}
                     className="flex items-center gap-3"
                   >

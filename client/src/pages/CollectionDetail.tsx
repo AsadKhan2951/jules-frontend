@@ -202,7 +202,7 @@ export default function CollectionDetail() {
             >
               {item.product.primaryImage ? (
                 <img
-                  src={item.product.primaryImage}
+                  src={item.product.thumbnail || item.product.primaryImage} loading="lazy"
                   alt={item.product.name}
                   className="w-full h-full object-cover"
                 />
@@ -244,7 +244,7 @@ export default function CollectionDetail() {
                       <div className="flex items-center gap-3">
                         {item.product.primaryImage ? (
                           <img
-                            src={item.product.primaryImage}
+                            src={item.product.thumbnail || item.product.primaryImage} loading="lazy"
                             alt={item.product.name}
                             className="w-12 h-12 rounded-lg object-cover"
                           />
@@ -305,7 +305,7 @@ export default function CollectionDetail() {
                   >
                     {item.product.primaryImage ? (
                       <img
-                        src={item.product.primaryImage}
+                        src={item.product.thumbnail || item.product.primaryImage} loading="lazy"
                         alt={item.product.name}
                         className="w-full h-full object-cover"
                       />

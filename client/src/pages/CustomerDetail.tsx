@@ -22,11 +22,15 @@ import {
   User
 } from "lucide-react";
 import { useParams, useLocation } from "wouter";
+import { useAuth } from "@/_core/hooks/useAuth";
+import { CustomerCatalogs } from "@/components/CustomerCatalogs";
 
 export default function CustomerDetail() {
   const params = useParams<{ id: string }>();
   const [, setLocation] = useLocation();
   const customerId = Number(params.id);
+  const { user } = useAuth();
+  const isSuperAdmin = user?.role === "admin";
 
   const { data: customer, isLoading: customerLoading } = trpc.customers.getById.useQuery(
     { id: customerId },
@@ -177,6 +181,9 @@ export default function CustomerDetail() {
           </div>
         </div>
       </div>
+
+      {/* Catalogs are created per customer (Super Admin) */}
+      {isSuperAdmin && <CustomerCatalogs customer={customer} />}
 
       {/* Orders Table */}
       <div className="rounded-xl bg-card border border-border overflow-hidden">

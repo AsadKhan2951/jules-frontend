@@ -7,6 +7,7 @@ import { ThemeProvider } from "./contexts/ThemeContext";
 import DashboardLayout from "./components/DashboardLayout";
 import Dashboard from "./pages/Dashboard";
 import Products from "./pages/Products";
+import ImportProducts from "./pages/ImportProducts";
 import Collections from "./pages/Collections";
 import CollectionDetail from "./pages/CollectionDetail";
 import Customers from "./pages/Customers";
@@ -34,6 +35,11 @@ function Router() {
       <Route path="/">
         <DashboardLayout>
           <RoleGate allow={["admin"]}><Dashboard /></RoleGate>
+        </DashboardLayout>
+      </Route>
+      <Route path="/products/import">
+        <DashboardLayout>
+          <RoleGate allow={["admin"]}><ImportProducts /></RoleGate>
         </DashboardLayout>
       </Route>
       <Route path="/products">

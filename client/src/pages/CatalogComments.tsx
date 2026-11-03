@@ -76,7 +76,7 @@ export default function CatalogComments() {
     <div className="space-y-6 animate-fadeIn">
       {/* Header */}
       <div className="flex items-center gap-4">
-        <Button variant="ghost" size="icon" onClick={() => setLocation("/catalogs")} className="hover:bg-card">
+        <Button variant="ghost" size="icon" onClick={() => setLocation(catalog?.catalog?.customerId ? `/customers/${catalog.catalog.customerId}` : "/catalogs")} className="hover:bg-card">
           <ArrowLeft className="h-5 w-5" />
         </Button>
         <div>
@@ -122,7 +122,7 @@ export default function CatalogComments() {
                     <div className="w-16 h-16 rounded-lg overflow-hidden flex-shrink-0">
                       {product.product.primaryImage ? (
                         <img
-                          src={product.product.primaryImage}
+                          src={product.product.thumbnail || product.product.primaryImage} loading="lazy"
                           alt={product.product.name}
                           className="w-full h-full object-cover"
                         />

@@ -200,7 +200,7 @@ export default function CatalogPreview() {
               >
                 {item.product.primaryImage ? (
                   <img
-                    src={item.product.primaryImage}
+                    src={item.product.thumbnail || item.product.primaryImage} loading="lazy"
                     alt={item.product.name}
                     className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-105"
                   />
