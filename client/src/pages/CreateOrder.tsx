@@ -1,6 +1,8 @@
 import { trpc } from "@/lib/trpc";
 import { DateInput } from "@/components/DateInput";
 import { ImageUploader } from "@/components/ImageUploader";
+import { ProductPicker } from "@/components/ProductPicker";
+import { OrderItemPicker } from "@/components/OrderItemPicker";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -31,6 +33,7 @@ import {
   Coins,
   Factory,
   ImageIcon,
+  BookImage,
   Lock,
 } from "lucide-react";
 import { useEffect, useState } from "react";
@@ -69,6 +72,7 @@ const capitalize = (value: string | null | undefined, fallback: string) =>
 
 type OrderItemForm = {
   id?: number;
+  productId: string;
   images: string[];
   itemName: string;
   vendorId: string;
@@ -90,6 +94,7 @@ type OrderItemForm = {
 };
 
 const emptyItem: OrderItemForm = {
+  productId: "",
   images: [],
   itemName: "",
   vendorId: "",
@@ -221,6 +226,7 @@ export default function CreateOrder() {
   const [prefilled, setPrefilled] = useState(false);
   const invoiced = Boolean(editing?.invoices?.some((invoice: any) => invoice.status !== "cancelled"));
   const locked = isEdit && invoiced;
+  const [pickingPictureFor, setPickingPictureFor] = useState<number | null>(null);
 
   useEffect(() => {
     if (!editing || prefilled) return;
@@ -237,6 +243,7 @@ export default function CreateOrder() {
       editing.items.length
         ? editing.items.map((item: any) => ({
             id: item.id,
+            productId: item.productId ? String(item.productId) : "",
             images: item.images ?? [],
             itemName: item.itemName ?? "",
             vendorId: item.vendorId ? String(item.vendorId) : "",
@@ -385,6 +392,7 @@ export default function CreateOrder() {
       .filter((item) => item.itemName)
       .map((item) => ({
         id: item.id,
+        productId: item.productId ? Number(item.productId) : 0,
         images: item.images,
         itemName: item.itemName,
         vendorId: item.vendorId ? Number(item.vendorId) : undefined,
@@ -909,19 +917,31 @@ export default function CreateOrder() {
               </div>
 
               {/* Item Type + Vendor + Labour */}
-              <div className="grid grid-cols-4 gap-4">
+              <div className="grid grid-cols-1 gap-4 md:grid-cols-[minmax(0,1.6fr)_repeat(3,minmax(0,1fr))]">
                 <div className="space-y-1.5">
-                  <Label className="text-xs text-muted-foreground">Item Type *</Label>
-                  <Select value={item.itemName} onValueChange={(v) => updateItem(idx, "itemName", v)} disabled={locked}>
-                    <SelectTrigger className="bg-input border-border h-9">
-                      <SelectValue placeholder="Select item" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {itemTypeOptions.map((t) => (
-                        <SelectItem key={t} value={t}>{t}</SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
+                  <Label className="text-xs text-muted-foreground">Product / Item *</Label>
+                  <OrderItemPicker
+                    value={item.itemName}
+                    productId={item.productId}
+                    types={itemTypeOptions}
+                    disabled={locked}
+                    onPickProduct={(product) =>
+                      setOrderItems((prev) =>
+                        prev.map((it, i) =>
+                          i === idx
+                            ? {
+                                ...it,
+                                productId: String(product.id),
+                                itemName: product.name,
+                                // The product's picture goes first, so it is the one on the invoice.
+                                images: product.image ? [product.image, ...it.images.filter((url) => url !== product.image)].slice(0, 10) : it.images,
+                              }
+                            : it
+                        )
+                      )
+                    }
+                    onPickType={(name) => setOrderItems((prev) => prev.map((it, i) => (i === idx ? { ...it, productId: "", itemName: name } : it)))}
+                  />
                 </div>
                 <div className="space-y-1.5">
                   <Label className="text-xs text-muted-foreground flex items-center gap-1">
@@ -1156,11 +1176,18 @@ export default function CreateOrder() {
                 <Label className="text-xs text-muted-foreground flex items-center gap-1.5">
                   <ImageIcon className="h-3.5 w-3.5" /> Design Images (shown on the invoice)
                 </Label>
-                <ImageUploader
-                  images={item.images}
-                  disabled={locked}
-                  onChange={(images) => setOrderItems((prev) => prev.map((it, i) => (i === idx ? { ...it, images } : it)))}
-                />
+                <div className="flex flex-wrap items-center gap-3">
+                  <ImageUploader
+                    images={item.images}
+                    disabled={locked}
+                    onChange={(images) => setOrderItems((prev) => prev.map((it, i) => (i === idx ? { ...it, images } : it)))}
+                  />
+                  {!locked && (
+                    <Button type="button" variant="outline" size="sm" onClick={() => setPickingPictureFor(idx)}>
+                      <BookImage className="mr-1.5 h-4 w-4" /> From catalogue
+                    </Button>
+                  )}
+                </div>
               </div>
             </div>
           ))}
@@ -1168,6 +1195,23 @@ export default function CreateOrder() {
       </div>
 
       </fieldset>
+
+      <ProductPicker
+        open={pickingPictureFor !== null}
+        onOpenChange={(open) => !open && setPickingPictureFor(null)}
+        onPick={(product) => {
+          const index = pickingPictureFor;
+          if (index === null) return;
+          if (!product.image) return toast.error("This product has no picture");
+          setOrderItems((prev) =>
+            prev.map((it, i) =>
+              i === index
+                ? { ...it, productId: it.productId || String(product.id), itemName: it.itemName || product.name, images: [product.image!, ...it.images.filter((url) => url !== product.image)].slice(0, 10) }
+                : it
+            )
+          );
+        }}
+      />
 
       {/* ============ ACTION BUTTONS ============ */}
       <div className="flex items-center justify-between rounded-xl bg-card border border-border p-5">
