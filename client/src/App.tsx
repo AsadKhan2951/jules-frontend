@@ -1,7 +1,7 @@
 import { Toaster } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import NotFound from "@/pages/NotFound";
-import { Redirect, Route, Switch, useLocation } from "wouter";
+import { Route, Switch, useLocation } from "wouter";
 import ErrorBoundary from "./components/ErrorBoundary";
 import { ThemeProvider } from "./contexts/ThemeContext";
 import DashboardLayout from "./components/DashboardLayout";
@@ -22,6 +22,7 @@ import JulesBotChat from "./components/JulesBotChat";
 import Finance from "./pages/Finance";
 import AccessManagement from "./pages/AccessManagement";
 import Invoices from "./pages/Invoices";
+import Vendors from "./pages/Vendors";
 import RoleGate from "./components/RoleGate";
 import { useAuth } from "./_core/hooks/useAuth";
 
@@ -113,9 +114,10 @@ function Router() {
         </DashboardLayout>
       </Route>
 
-      {/* Redirect removed pages */}
       <Route path="/vendors">
-        <Redirect to="/orders" />
+        <DashboardLayout>
+          <RoleGate allow={["admin", "operations_finance"]}><Vendors /></RoleGate>
+        </DashboardLayout>
       </Route>
       
       <Route path="/404" component={NotFound} />

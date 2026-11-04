@@ -47,6 +47,7 @@ import {
   WalletCards,
   ShieldCheck,
   ReceiptText,
+  Hammer,
 } from "lucide-react";
 import { CSSProperties, useEffect, useRef, useState } from "react";
 import { useLocation } from "wouter";
@@ -70,6 +71,7 @@ const menuItems = [
   { icon: Users, label: "Customers", path: "/customers", roles: ["admin", "operations_finance"] },
   { icon: ShoppingCart, label: "Orders", path: "/orders", roles: ["admin", "operations_finance"] },
   { icon: ReceiptText, label: "Invoices", path: "/invoices", roles: ["admin", "operations_finance"] },
+  { icon: Hammer, label: "Vendors", path: "/vendors", roles: ["admin", "operations_finance"] },
   { icon: WalletCards, label: "Finance", path: "/finance", roles: ["admin", "operations_finance"] },
   { icon: ShieldCheck, label: "Users & Access", path: "/access", roles: ["admin"] },
 ];
