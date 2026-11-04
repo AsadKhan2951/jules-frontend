@@ -1210,9 +1210,10 @@ export default function OrderDetail() {
       <InvoiceViewDialog
         invoiceId={viewInvoiceId}
         onClose={() => setViewInvoiceId(null)}
-        orderNumber={order.orderNumber}
+        order={order}
         customer={customer}
         orderItems={orderDetail?.items ?? []}
+        itemCovers={(orderDetail as any)?.itemCovers}
       />
 
       {/* Cancel Order Confirmation */}

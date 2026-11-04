@@ -16,6 +16,8 @@ import {
   ArrowDownLeft,
   ArrowUpRight,
   Banknote,
+  Loader2,
+  Pencil,
   BookOpenCheck,
   Building2,
   CircleDollarSign,
@@ -80,6 +82,8 @@ export default function Finance() {
     narration: "",
   });
   const [voucherLines, setVoucherLines] = useState<VoucherLine[]>([{ accountId: "", amount: "", description: "" }]);
+  const [editingVoucher, setEditingVoucher] = useState<{ id: number; entryNumber: string } | null>(null);
+  const [loadingVoucherId, setLoadingVoucherId] = useState<number | null>(null);
 
   const [journalForm, setJournalForm] = useState({ entryDate: today(), narration: "" });
   const [journalLines, setJournalLines] = useState<GeneralLine[]>([
@@ -116,16 +120,71 @@ export default function Finance() {
     onError: error => toast.error(error.message),
   });
 
+  const resetVoucher = (voucherType: "cash_receipt" | "cash_payment" = "cash_receipt") => {
+    setEditingVoucher(null);
+    setVoucherForm({ voucherType, entryDate: today(), cashAccountId: "", narration: "" });
+    setVoucherLines([{ accountId: "", amount: "", description: "" }]);
+  };
+  const openNewVoucher = (voucherType: "cash_receipt" | "cash_payment" = "cash_receipt") => {
+    resetVoucher(voucherType);
+    setShowVoucherDialog(true);
+  };
+
   const createVoucher = trpc.finance.vouchers.create.useMutation({
     onSuccess: async data => {
       toast.success(`Voucher ${data.entryNumber} posted`);
       setShowVoucherDialog(false);
-      setVoucherForm({ voucherType: "cash_receipt", entryDate: today(), cashAccountId: "", narration: "" });
-      setVoucherLines([{ accountId: "", amount: "", description: "" }]);
+      resetVoucher();
       await refreshFinance();
     },
     onError: error => toast.error(error.message),
   });
+
+  const updateVoucher = trpc.finance.vouchers.update.useMutation({
+    onSuccess: async data => {
+      toast.success(`Voucher updated — saved as ${data.entryNumber}`);
+      setShowVoucherDialog(false);
+      resetVoucher();
+      await refreshFinance();
+    },
+    onError: error => toast.error(error.message),
+  });
+
+  /** Load a posted voucher into the voucher form for editing. */
+  const startEditVoucher = async (id: number) => {
+    setLoadingVoucherId(id);
+    try {
+      const data = await utils.finance.journals.get.fetch({ id });
+      if (!data) return toast.error("Voucher not found");
+      const type = data.entry.entryType === "cash_payment" ? "cash_payment" : "cash_receipt";
+      // Cash side: debited on a receive, credited on a payment.
+      const isCashSide = (row: any) =>
+        String(row.account?.code ?? "").startsWith("CA") && Number(type === "cash_receipt" ? row.line.debit : row.line.credit) > 0;
+      const cash = data.lines.find(isCashSide);
+      const others = data.lines.filter((row: any) => row !== cash);
+      setVoucherForm({
+        voucherType: type,
+        entryDate: new Date(data.entry.entryDate).toISOString().slice(0, 10),
+        cashAccountId: cash ? String(cash.account.id) : "",
+        narration: data.entry.narration ?? "",
+      });
+      setVoucherLines(
+        others.length
+          ? others.map((row: any) => ({
+              accountId: String(row.account.id),
+              amount: String(Number(type === "cash_receipt" ? row.line.credit : row.line.debit) || ""),
+              description: row.line.description ?? "",
+            }))
+          : [{ accountId: "", amount: "", description: "" }]
+      );
+      setEditingVoucher({ id, entryNumber: data.entry.entryNumber });
+      setShowVoucherDialog(true);
+    } catch (error) {
+      toast.error((error as Error).message || "Could not load the voucher");
+    } finally {
+      setLoadingVoucherId(null);
+    }
+  };
 
   const createJournal = trpc.finance.journals.create.useMutation({
     onSuccess: async data => {
@@ -222,13 +281,15 @@ export default function Finance() {
     if (!voucherForm.cashAccountId) return toast.error("Select a cash or bank account");
     const validLines = voucherLines.filter(line => line.accountId && Number(line.amount) > 0);
     if (!validLines.length) return toast.error("Add at least one valid voucher line");
-    createVoucher.mutate({
+    const payload = {
       voucherType: voucherForm.voucherType,
       entryDate: voucherForm.entryDate,
       cashAccountId: Number(voucherForm.cashAccountId),
       narration: voucherForm.narration || undefined,
       counterpartLines: validLines.map(line => ({ accountId: Number(line.accountId), amount: line.amount, description: line.description || undefined })),
-    });
+    };
+    if (editingVoucher) updateVoucher.mutate({ id: editingVoucher.id, ...payload });
+    else createVoucher.mutate(payload);
   };
 
   const submitJournal = () => {
@@ -270,7 +331,7 @@ export default function Finance() {
         <div className="flex flex-wrap gap-2">
           <Button variant="outline" onClick={() => setShowAccountDialog(true)}><Plus className="h-4 w-4 mr-2" />New Ledger</Button>
           <Button variant="outline" onClick={() => setShowJournalDialog(true)}><BookOpenCheck className="h-4 w-4 mr-2" />General Journal</Button>
-          <Button onClick={() => setShowVoucherDialog(true)} className="gold-gradient text-primary-foreground border-0"><ReceiptText className="h-4 w-4 mr-2" />Cash Voucher</Button>
+          <Button onClick={() => openNewVoucher()} className="gold-gradient text-primary-foreground border-0"><ReceiptText className="h-4 w-4 mr-2" />Cash Voucher</Button>
         </div>
       </div>
 
@@ -308,8 +369,8 @@ export default function Finance() {
           <Card className="border-border">
             <CardHeader className="pb-3"><CardTitle className="text-base">Controls</CardTitle></CardHeader>
             <CardContent className="space-y-3">
-              <QuickAction icon={ArrowDownLeft} title="Receive money" description="Debit cash, credit customer or ledger" onClick={() => { setVoucherForm(form => ({ ...form, voucherType: "cash_receipt" })); setShowVoucherDialog(true); }} />
-              <QuickAction icon={ArrowUpRight} title="Make payment" description="Debit expense/vendor, credit cash" onClick={() => { setVoucherForm(form => ({ ...form, voucherType: "cash_payment" })); setShowVoucherDialog(true); }} />
+              <QuickAction icon={ArrowDownLeft} title="Receive money" description="Debit cash, credit customer or ledger" onClick={() => openNewVoucher("cash_receipt")} />
+              <QuickAction icon={ArrowUpRight} title="Make payment" description="Debit expense/vendor, credit cash" onClick={() => openNewVoucher("cash_payment")} />
               <QuickAction icon={BookOpenCheck} title="Post adjustment" description="Create a balanced general journal" onClick={() => setShowJournalDialog(true)} />
             </CardContent>
           </Card>
@@ -331,7 +392,7 @@ export default function Finance() {
         </TabsContent>
 
         <TabsContent value="cashbook" className="mt-5">
-          <Card className="border-border"><CardHeader className="flex-row items-center justify-between"><div><CardTitle className="text-base">Cash Book</CardTitle><p className="text-sm text-muted-foreground mt-1">Posted cash receives and cash payments.</p></div><Button onClick={() => setShowVoucherDialog(true)}><Plus className="h-4 w-4 mr-2" />New Voucher</Button></CardHeader><CardContent className="p-0"><JournalTable entries={(journals.data || []).filter(item => item.entry.entryType === "cash_receipt" || item.entry.entryType === "cash_payment")} canReverse={false} onReverse={setReversingEntryId} onDelete={setDeletingVoucherId} /></CardContent></Card>
+          <Card className="border-border"><CardHeader className="flex-row items-center justify-between"><div><CardTitle className="text-base">Cash Book</CardTitle><p className="text-sm text-muted-foreground mt-1">Posted cash receives and cash payments.</p></div><Button onClick={() => openNewVoucher()}><Plus className="h-4 w-4 mr-2" />New Voucher</Button></CardHeader><CardContent className="p-0"><JournalTable entries={(journals.data || []).filter(item => item.entry.entryType === "cash_receipt" || item.entry.entryType === "cash_payment")} canReverse={false} onReverse={setReversingEntryId} onDelete={setDeletingVoucherId} onEdit={startEditVoucher} loadingId={loadingVoucherId} /></CardContent></Card>
         </TabsContent>
 
         <TabsContent value="journal" className="mt-5">
@@ -350,7 +411,7 @@ export default function Finance() {
 
       <Dialog open={showAccountDialog} onOpenChange={setShowAccountDialog}><DialogContent className="max-w-xl"><DialogHeader><DialogTitle>New Ledger Account</DialogTitle><DialogDescription>Create a control or detail ledger. Account codes and entity ledgers are generated automatically.</DialogDescription></DialogHeader><div className="grid grid-cols-2 gap-4 py-2"><Field label="Account Code (optional)"><Input value={accountForm.code} onChange={event => setAccountForm(form => ({ ...form, code: event.target.value }))} placeholder="Auto-generated" /></Field><Field label="Title"><Input value={accountForm.title} onChange={event => setAccountForm(form => ({ ...form, title: event.target.value }))} placeholder="Office Expense" /></Field><Field label="Ledger Type"><Select value={accountForm.ledgerType} onValueChange={(value: "control" | "detail") => setAccountForm(form => ({ ...form, ledgerType: value, parentId: value === "control" ? "" : form.parentId }))}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent><SelectItem value="control">Control</SelectItem><SelectItem value="detail">Detail</SelectItem></SelectContent></Select></Field><Field label="Account Class"><Select value={accountForm.accountClass} onValueChange={(value: typeof accountForm.accountClass) => setAccountForm(form => ({ ...form, accountClass: value }))}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent>{["asset", "liability", "equity", "income", "expense"].map(value => <SelectItem key={value} value={value}>{value[0].toUpperCase() + value.slice(1)}</SelectItem>)}</SelectContent></Select></Field>{accountForm.ledgerType === "detail" && <div className="col-span-2"><Field label="Parent Control Ledger"><Select value={accountForm.parentId} onValueChange={value => setAccountForm(form => ({ ...form, parentId: value }))}><SelectTrigger><SelectValue placeholder="Select parent" /></SelectTrigger><SelectContent>{controlAccounts.map(account => <SelectItem key={account.id} value={String(account.id)}>{account.code} — {account.title}</SelectItem>)}</SelectContent></Select></Field></div>}<Field label="Opening Balance"><Input type="number" value={accountForm.openingBalance} onChange={event => setAccountForm(form => ({ ...form, openingBalance: event.target.value }))} /></Field><Field label="Balance Side"><Select value={accountForm.openingBalanceSide} onValueChange={(value: "debit" | "credit") => setAccountForm(form => ({ ...form, openingBalanceSide: value }))}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent><SelectItem value="debit">Debit</SelectItem><SelectItem value="credit">Credit</SelectItem></SelectContent></Select></Field><div className="col-span-2"><Field label="Description"><Textarea value={accountForm.description} onChange={event => setAccountForm(form => ({ ...form, description: event.target.value }))} rows={2} /></Field></div></div><div className="flex justify-end gap-2"><Button variant="outline" onClick={() => setShowAccountDialog(false)}>Cancel</Button><Button onClick={submitAccount} disabled={createAccount.isPending}>Create Ledger</Button></div></DialogContent></Dialog>
 
-      <Dialog open={showVoucherDialog} onOpenChange={setShowVoucherDialog}><DialogContent className="max-w-3xl"><DialogHeader><DialogTitle>{voucherForm.voucherType === "cash_receipt" ? "New Cash Receive" : "New Cash Payment"}</DialogTitle><DialogDescription>The cash-side entry is generated automatically; add one or more counterpart ledgers.</DialogDescription></DialogHeader><div className="grid grid-cols-1 md:grid-cols-3 gap-4"><Field label="Voucher Type"><Select value={voucherForm.voucherType} onValueChange={(value: "cash_receipt" | "cash_payment") => setVoucherForm(form => ({ ...form, voucherType: value }))}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent><SelectItem value="cash_receipt">Receive</SelectItem><SelectItem value="cash_payment">Payment</SelectItem></SelectContent></Select></Field><Field label="Date"><DateInput value={voucherForm.entryDate} onChange={value => setVoucherForm(form => ({ ...form, entryDate: value }))} clearable={false} /></Field><Field label="Cash / Bank / Online Account"><div className="flex gap-2"><Select value={voucherForm.cashAccountId} onValueChange={value => setVoucherForm(form => ({ ...form, cashAccountId: value }))}><SelectTrigger className="flex-1"><SelectValue placeholder="Select account" /></SelectTrigger><SelectContent>{cashAccounts.map(account => <SelectItem key={account.id} value={String(account.id)}>{account.code} — {account.title}</SelectItem>)}</SelectContent></Select><Button type="button" variant="outline" size="icon" title="Add bank / cash account" onClick={() => setShowCashAccountDialog(true)}><Plus className="h-4 w-4" /></Button></div></Field></div><Field label="Narration"><Input value={voucherForm.narration} onChange={event => setVoucherForm(form => ({ ...form, narration: event.target.value }))} placeholder="Payment or receive details" /></Field><div className="space-y-2"><div className="grid grid-cols-[1.2fr_1.4fr_0.7fr_36px] gap-2 text-xs text-muted-foreground px-1"><span>Ledger Account</span><span>Description</span><span>Amount</span><span /></div>{voucherLines.map((line, index) => <div key={index} className="grid grid-cols-[1.2fr_1.4fr_0.7fr_36px] gap-2"><Select value={line.accountId} onValueChange={value => setVoucherLines(lines => lines.map((item, itemIndex) => itemIndex === index ? { ...item, accountId: value } : item))}><SelectTrigger><SelectValue placeholder="Select ledger" /></SelectTrigger><SelectContent>{detailAccounts.filter(account => String(account.id) !== voucherForm.cashAccountId).map(account => <SelectItem key={account.id} value={String(account.id)}>{account.code} — {account.title}</SelectItem>)}</SelectContent></Select><Input value={line.description} onChange={event => setVoucherLines(lines => lines.map((item, itemIndex) => itemIndex === index ? { ...item, description: event.target.value } : item))} placeholder="Line narration" /><Input type="number" value={line.amount} onChange={event => setVoucherLines(lines => lines.map((item, itemIndex) => itemIndex === index ? { ...item, amount: event.target.value } : item))} placeholder="0.00" /><Button variant="ghost" size="icon" disabled={voucherLines.length === 1} onClick={() => setVoucherLines(lines => lines.filter((_, itemIndex) => itemIndex !== index))}><Trash2 className="h-4 w-4" /></Button></div>)}<Button variant="ghost" size="sm" onClick={() => setVoucherLines(lines => [...lines, { accountId: "", amount: "", description: "" }])}><Plus className="h-4 w-4 mr-1" />Add Line</Button></div><div className="flex items-center justify-between border-t border-border pt-4"><p className="font-semibold">Voucher Total: {money(voucherTotal)}</p><div className="flex gap-2"><Button variant="outline" onClick={() => setShowVoucherDialog(false)}>Cancel</Button><Button onClick={submitVoucher} disabled={createVoucher.isPending}>Post Voucher</Button></div></div></DialogContent></Dialog>
+      <Dialog open={showVoucherDialog} onOpenChange={open => { setShowVoucherDialog(open); if (!open && editingVoucher) resetVoucher(); }}><DialogContent className="max-w-3xl"><DialogHeader><DialogTitle>{editingVoucher ? `Edit ${voucherForm.voucherType === "cash_receipt" ? "Cash Receive" : "Cash Payment"} · ${editingVoucher.entryNumber}` : voucherForm.voucherType === "cash_receipt" ? "New Cash Receive" : "New Cash Payment"}</DialogTitle><DialogDescription>{editingVoucher ? "Saving posts the corrected voucher and reverses the old one, so balances update and the history is kept." : "The cash-side entry is generated automatically; add one or more counterpart ledgers."}</DialogDescription></DialogHeader><div className="grid grid-cols-1 md:grid-cols-3 gap-4"><Field label="Voucher Type"><Select value={voucherForm.voucherType} onValueChange={(value: "cash_receipt" | "cash_payment") => setVoucherForm(form => ({ ...form, voucherType: value }))}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent><SelectItem value="cash_receipt">Receive</SelectItem><SelectItem value="cash_payment">Payment</SelectItem></SelectContent></Select></Field><Field label="Date"><DateInput value={voucherForm.entryDate} onChange={value => setVoucherForm(form => ({ ...form, entryDate: value }))} clearable={false} /></Field><Field label="Cash / Bank / Online Account"><div className="flex gap-2"><Select value={voucherForm.cashAccountId} onValueChange={value => setVoucherForm(form => ({ ...form, cashAccountId: value }))}><SelectTrigger className="flex-1"><SelectValue placeholder="Select account" /></SelectTrigger><SelectContent>{cashAccounts.map(account => <SelectItem key={account.id} value={String(account.id)}>{account.code} — {account.title}</SelectItem>)}</SelectContent></Select><Button type="button" variant="outline" size="icon" title="Add bank / cash account" onClick={() => setShowCashAccountDialog(true)}><Plus className="h-4 w-4" /></Button></div></Field></div><Field label="Narration"><Input value={voucherForm.narration} onChange={event => setVoucherForm(form => ({ ...form, narration: event.target.value }))} placeholder="Payment or receive details" /></Field><div className="space-y-2"><div className="grid grid-cols-[1.2fr_1.4fr_0.7fr_36px] gap-2 text-xs text-muted-foreground px-1"><span>Ledger Account</span><span>Description</span><span>Amount</span><span /></div>{voucherLines.map((line, index) => <div key={index} className="grid grid-cols-[1.2fr_1.4fr_0.7fr_36px] gap-2"><Select value={line.accountId} onValueChange={value => setVoucherLines(lines => lines.map((item, itemIndex) => itemIndex === index ? { ...item, accountId: value } : item))}><SelectTrigger><SelectValue placeholder="Select ledger" /></SelectTrigger><SelectContent>{detailAccounts.filter(account => String(account.id) !== voucherForm.cashAccountId).map(account => <SelectItem key={account.id} value={String(account.id)}>{account.code} — {account.title}</SelectItem>)}</SelectContent></Select><Input value={line.description} onChange={event => setVoucherLines(lines => lines.map((item, itemIndex) => itemIndex === index ? { ...item, description: event.target.value } : item))} placeholder="Line narration" /><Input type="number" value={line.amount} onChange={event => setVoucherLines(lines => lines.map((item, itemIndex) => itemIndex === index ? { ...item, amount: event.target.value } : item))} placeholder="0.00" /><Button variant="ghost" size="icon" disabled={voucherLines.length === 1} onClick={() => setVoucherLines(lines => lines.filter((_, itemIndex) => itemIndex !== index))}><Trash2 className="h-4 w-4" /></Button></div>)}<Button variant="ghost" size="sm" onClick={() => setVoucherLines(lines => [...lines, { accountId: "", amount: "", description: "" }])}><Plus className="h-4 w-4 mr-1" />Add Line</Button></div><div className="flex items-center justify-between border-t border-border pt-4"><p className="font-semibold">Voucher Total: {money(voucherTotal)}</p><div className="flex gap-2"><Button variant="outline" onClick={() => setShowVoucherDialog(false)}>Cancel</Button><Button onClick={submitVoucher} disabled={createVoucher.isPending || updateVoucher.isPending}>{editingVoucher ? "Save Changes" : "Post Voucher"}</Button></div></div></DialogContent></Dialog>
 
       <Dialog open={showJournalDialog} onOpenChange={setShowJournalDialog}><DialogContent className="max-w-4xl"><DialogHeader><DialogTitle>New General Journal</DialogTitle><DialogDescription>Every entry must balance. Posted entries can only be corrected with a reversal.</DialogDescription></DialogHeader><div className="grid grid-cols-[180px_1fr] gap-4"><Field label="Date"><DateInput value={journalForm.entryDate} onChange={value => setJournalForm(form => ({ ...form, entryDate: value }))} clearable={false} /></Field><Field label="Narration"><Input value={journalForm.narration} onChange={event => setJournalForm(form => ({ ...form, narration: event.target.value }))} placeholder="Reason for adjustment" /></Field></div><div className="space-y-2"><div className="grid grid-cols-[1.2fr_0.6fr_0.6fr_1.2fr_36px] gap-2 text-xs text-muted-foreground px-1"><span>Account</span><span>Side</span><span>Amount</span><span>Description</span><span /></div>{journalLines.map((line, index) => <div key={index} className="grid grid-cols-[1.2fr_0.6fr_0.6fr_1.2fr_36px] gap-2"><Select value={line.accountId} onValueChange={value => setJournalLines(lines => lines.map((item, itemIndex) => itemIndex === index ? { ...item, accountId: value } : item))}><SelectTrigger><SelectValue placeholder="Select ledger" /></SelectTrigger><SelectContent>{detailAccounts.map(account => <SelectItem key={account.id} value={String(account.id)}>{account.code} — {account.title}</SelectItem>)}</SelectContent></Select><Select value={line.side} onValueChange={(value: "debit" | "credit") => setJournalLines(lines => lines.map((item, itemIndex) => itemIndex === index ? { ...item, side: value } : item))}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent><SelectItem value="debit">Debit</SelectItem><SelectItem value="credit">Credit</SelectItem></SelectContent></Select><Input type="number" value={line.amount} onChange={event => setJournalLines(lines => lines.map((item, itemIndex) => itemIndex === index ? { ...item, amount: event.target.value } : item))} placeholder="0.00" /><Input value={line.description} onChange={event => setJournalLines(lines => lines.map((item, itemIndex) => itemIndex === index ? { ...item, description: event.target.value } : item))} placeholder="Line details" /><Button variant="ghost" size="icon" disabled={journalLines.length === 2} onClick={() => setJournalLines(lines => lines.filter((_, itemIndex) => itemIndex !== index))}><Trash2 className="h-4 w-4" /></Button></div>)}<Button variant="ghost" size="sm" onClick={() => setJournalLines(lines => [...lines, { accountId: "", side: "debit", amount: "", description: "" }])}><Plus className="h-4 w-4 mr-1" />Add Line</Button></div><div className={`rounded-lg border p-3 flex items-center justify-between ${Math.round(journalDebit * 100) === Math.round(journalCredit * 100) && journalDebit > 0 ? "border-emerald-500/30 bg-emerald-500/5" : "border-amber-500/30 bg-amber-500/5"}`}><div className="flex gap-6 text-sm"><span>Debit <strong>{money(journalDebit)}</strong></span><span>Credit <strong>{money(journalCredit)}</strong></span></div><span className="text-xs font-medium">{Math.round(journalDebit * 100) === Math.round(journalCredit * 100) && journalDebit > 0 ? "Balanced" : "Not balanced"}</span></div><div className="flex justify-end gap-2"><Button variant="outline" onClick={() => setShowJournalDialog(false)}>Cancel</Button><Button onClick={submitJournal} disabled={createJournal.isPending}>Post Journal</Button></div></DialogContent></Dialog>
 
@@ -369,8 +430,8 @@ function QuickAction({ icon: Icon, title, description, onClick }: { icon: typeof
   return <button onClick={onClick} className="w-full rounded-xl border border-border bg-muted/20 p-4 text-left flex gap-3 hover:border-primary/40 hover:bg-primary/5 transition-colors"><div className="h-9 w-9 rounded-lg bg-primary/10 flex items-center justify-center shrink-0"><Icon className="h-4 w-4 text-primary" /></div><div><p className="text-sm font-medium text-foreground">{title}</p><p className="text-xs text-muted-foreground mt-0.5">{description}</p></div></button>;
 }
 
-function JournalTable({ entries, canReverse, onReverse, onDelete }: { entries: any[]; canReverse: boolean; onReverse: (id: number) => void; onDelete?: (id: number) => void }) {
+function JournalTable({ entries, canReverse, onReverse, onDelete, onEdit, loadingId }: { entries: any[]; canReverse: boolean; onReverse: (id: number) => void; onDelete?: (id: number) => void; onEdit?: (id: number) => void; loadingId?: number | null }) {
   if (!entries.length) return <div className="py-12 text-center text-sm text-muted-foreground">No posted finance transactions yet.</div>;
   const showActions = canReverse || Boolean(onDelete);
-  return <div className="overflow-x-auto"><table className="w-full text-sm"><thead><tr className="border-y border-border bg-muted/30"><th className="px-5 py-3 text-left">Entry</th><th className="px-5 py-3 text-left">Date</th><th className="px-5 py-3 text-left">Type</th><th className="px-5 py-3 text-left">Narration</th><th className="px-5 py-3 text-right">Amount</th><th className="px-5 py-3 text-right">Status</th>{showActions && <th className="px-5 py-3 text-right">Action</th>}</tr></thead><tbody>{entries.map(({ entry }) => <tr key={entry.id} className="border-b border-border/60 hover:bg-muted/20"><td className="px-5 py-3 font-mono text-xs text-primary">{entry.entryNumber}</td><td className="px-5 py-3 text-muted-foreground">{new Date(entry.entryDate).toLocaleDateString()}</td><td className="px-5 py-3"><Badge variant="outline">{entryLabels[entry.entryType] || entry.entryType}</Badge></td><td className="px-5 py-3 text-muted-foreground max-w-xs truncate">{entry.narration || "—"}</td><td className="px-5 py-3 text-right font-medium">{money(entry.totalDebit)}</td><td className="px-5 py-3 text-right"><Badge className={entry.status === "posted" ? "bg-emerald-500/10 text-emerald-600" : "bg-zinc-500/10 text-zinc-500"}>{onDelete && entry.status === "reversed" ? "deleted" : entry.status}</Badge></td>{showActions && <td className="px-5 py-3 text-right">{onDelete ? <Button variant="ghost" size="sm" className="text-destructive hover:text-destructive" disabled={entry.status !== "posted"} onClick={() => onDelete(entry.id)}><Trash2 className="h-3.5 w-3.5 mr-1" />Delete</Button> : <Button variant="ghost" size="sm" disabled={entry.status !== "posted" || entry.entryType === "reversal"} onClick={() => onReverse(entry.id)}><RotateCcw className="h-3.5 w-3.5 mr-1" />Reverse</Button>}</td>}</tr>)}</tbody></table></div>;
+  return <div className="overflow-x-auto"><table className="w-full text-sm"><thead><tr className="border-y border-border bg-muted/30"><th className="px-5 py-3 text-left">Entry</th><th className="px-5 py-3 text-left">Date</th><th className="px-5 py-3 text-left">Type</th><th className="px-5 py-3 text-left">Narration</th><th className="px-5 py-3 text-right">Amount</th><th className="px-5 py-3 text-right">Status</th>{showActions && <th className="px-5 py-3 text-right">Action</th>}</tr></thead><tbody>{entries.map(({ entry }) => <tr key={entry.id} className="border-b border-border/60 hover:bg-muted/20"><td className="px-5 py-3 font-mono text-xs text-primary">{entry.entryNumber}</td><td className="px-5 py-3 text-muted-foreground">{new Date(entry.entryDate).toLocaleDateString()}</td><td className="px-5 py-3"><Badge variant="outline">{entryLabels[entry.entryType] || entry.entryType}</Badge></td><td className="px-5 py-3 text-muted-foreground max-w-xs truncate">{entry.narration || "—"}</td><td className="px-5 py-3 text-right font-medium">{money(entry.totalDebit)}</td><td className="px-5 py-3 text-right"><Badge className={entry.status === "posted" ? "bg-emerald-500/10 text-emerald-600" : "bg-zinc-500/10 text-zinc-500"}>{onDelete && entry.status === "reversed" ? (String(entry.reversalReason ?? "").includes("Voucher edited") ? "edited" : "deleted") : entry.status}</Badge></td>{showActions && <td className="px-5 py-3 text-right">{onDelete ? <div className="inline-flex gap-1">{onEdit && <Button variant="ghost" size="sm" disabled={entry.status !== "posted" || loadingId === entry.id} onClick={() => onEdit(entry.id)}>{loadingId === entry.id ? <Loader2 className="h-3.5 w-3.5 mr-1 animate-spin" /> : <Pencil className="h-3.5 w-3.5 mr-1" />}Edit</Button>}<Button variant="ghost" size="sm" className="text-destructive hover:text-destructive" disabled={entry.status !== "posted"} onClick={() => onDelete(entry.id)}><Trash2 className="h-3.5 w-3.5 mr-1" />Delete</Button></div> : <Button variant="ghost" size="sm" disabled={entry.status !== "posted" || entry.entryType === "reversal"} onClick={() => onReverse(entry.id)}><RotateCcw className="h-3.5 w-3.5 mr-1" />Reverse</Button>}</td>}</tr>)}</tbody></table></div>;
 }
