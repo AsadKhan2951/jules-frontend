@@ -21,6 +21,7 @@ import {
 import { useState, useEffect, useCallback } from "react";
 import { useTheme } from "@/contexts/ThemeContext";
 import { GoldPriceDialog } from "@/components/GoldPriceDialog";
+import { QuickTasks } from "@/components/QuickTasks";
 
 // Custom event to open chat widget
 const openJulesBotChat = () => {
@@ -297,6 +298,8 @@ export default function Dashboard() {
           Set Gold Price
         </Button>
       </div>
+
+      <QuickTasks />
 
       {/* Gold Price Card */}
       <div className={`relative overflow-hidden rounded-2xl p-6 ${

@@ -48,10 +48,21 @@ import {
   ShieldCheck,
   ReceiptText,
   Hammer,
+  Scale,
+  ClipboardList,
   DatabaseBackup,
+  FilePlus2,
+  ArrowUpFromLine,
+  ArrowDownToLine,
+  ArrowDownLeft,
+  ArrowUpRight,
+  BookOpenCheck,
+  Coins,
+  PackageCheck,
+  Boxes,
 } from "lucide-react";
 import { CSSProperties, useEffect, useRef, useState } from "react";
-import { useLocation } from "wouter";
+import { useLocation, useSearch } from "wouter";
 import { DashboardLayoutSkeleton } from './DashboardLayoutSkeleton';
 import { Button } from "./ui/button";
 import { Input } from "./ui/input";
@@ -66,17 +77,90 @@ import {
 } from "@/components/ui/command";
 import { trpc } from "@/lib/trpc";
 
-const menuItems = [
-  { icon: LayoutDashboard, label: "Dashboard", path: "/", roles: ["admin"] },
-  { icon: Package, label: "Products", path: "/products", roles: ["admin"] },
-  { icon: Users, label: "Customers", path: "/customers", roles: ["admin", "operations_finance"] },
-  { icon: ShoppingCart, label: "Orders", path: "/orders", roles: ["admin", "operations_finance"] },
-  { icon: ReceiptText, label: "Invoices", path: "/invoices", roles: ["admin", "operations_finance"] },
-  { icon: Hammer, label: "Vendors", path: "/vendors", roles: ["admin", "operations_finance"] },
-  { icon: WalletCards, label: "Finance", path: "/finance", roles: ["admin", "operations_finance"] },
-  { icon: ShieldCheck, label: "Users & Access", path: "/access", roles: ["admin"] },
-  { icon: DatabaseBackup, label: "Backup & Restore", path: "/backups", roles: ["admin"] },
+type MenuItem = { icon: typeof LayoutDashboard; label: string; path: string; roles: string[] };
+
+/**
+ * Menu grouped like the shop's old Zewar system (Sales · Karigar & Stock · Accounts · Reports ·
+ * Administration), with each everyday job as its own plain-named link.
+ */
+const menuSections: Array<{ title: string | null; items: MenuItem[] }> = [
+  {
+    title: null,
+    items: [
+      { icon: LayoutDashboard, label: "Dashboard", path: "/", roles: ["admin"] },
+      { icon: LayoutDashboard, label: "Home", path: "/", roles: ["operations_finance"] },
+    ],
+  },
+  {
+    title: "Sales",
+    items: [
+      { icon: ShoppingCart, label: "Sales Orders", path: "/orders", roles: ["admin", "operations_finance"] },
+      { icon: FilePlus2, label: "New Sales Order", path: "/orders/new", roles: ["admin", "operations_finance"] },
+      { icon: ReceiptText, label: "Invoices", path: "/invoices", roles: ["admin", "operations_finance"] },
+      { icon: Users, label: "Customers", path: "/customers", roles: ["admin", "operations_finance"] },
+    ],
+  },
+  {
+    title: "Karigar & Stock",
+    items: [
+      { icon: ArrowUpFromLine, label: "Issue to Karigar", path: "/stock/VI", roles: ["admin", "operations_finance"] },
+      { icon: ArrowDownToLine, label: "Return from Karigar", path: "/stock/VR", roles: ["admin", "operations_finance"] },
+      { icon: Scale, label: "Purchase / Sale Stock", path: "/stock/PM", roles: ["admin", "operations_finance"] },
+      { icon: Hammer, label: "Karigars (Vendors)", path: "/vendors", roles: ["admin", "operations_finance"] },
+    ],
+  },
+  {
+    title: "Accounts",
+    items: [
+      { icon: ArrowDownLeft, label: "Cash Receive", path: "/finance?new=receipt", roles: ["admin", "operations_finance"] },
+      { icon: ArrowUpRight, label: "Cash Payment", path: "/finance?new=payment", roles: ["admin", "operations_finance"] },
+      { icon: BookOpenCheck, label: "General Journal", path: "/finance?new=journal", roles: ["admin", "operations_finance"] },
+      { icon: BookOpen, label: "Ledger Report", path: "/finance?tab=ledger", roles: ["admin", "operations_finance"] },
+      { icon: WalletCards, label: "Finance Board", path: "/finance", roles: ["admin", "operations_finance"] },
+    ],
+  },
+  {
+    title: "Reports",
+    items: [
+      { icon: ClipboardList, label: "Karigar Statement", path: "/stock-reports?tab=statement", roles: ["admin", "operations_finance"] },
+      { icon: Coins, label: "Gold with Karigars", path: "/stock-reports?tab=balances", roles: ["admin", "operations_finance"] },
+      { icon: PackageCheck, label: "Stock Ready Item", path: "/stock-reports?tab=ready", roles: ["admin", "operations_finance"] },
+      { icon: Boxes, label: "Stock Position", path: "/stock-reports?tab=position", roles: ["admin", "operations_finance"] },
+    ],
+  },
+  {
+    title: "Catalogue",
+    items: [{ icon: Package, label: "Products", path: "/products", roles: ["admin"] }],
+  },
+  {
+    title: "Administration",
+    items: [
+      { icon: ShieldCheck, label: "Users & Access", path: "/access", roles: ["admin"] },
+      { icon: DatabaseBackup, label: "Backup & Restore", path: "/backups", roles: ["admin"] },
+    ],
+  },
 ];
+const menuItems: MenuItem[] = menuSections.flatMap(section => section.items);
+
+const TEXT_SIZE_KEY = "jules.textSize";
+const TEXT_SIZES = [
+  { key: "normal", label: "A", px: 16 },
+  { key: "large", label: "A+", px: 17.5 },
+  { key: "xl", label: "A++", px: 19 },
+] as const;
+type TextSizeKey = (typeof TEXT_SIZES)[number]["key"];
+function readTextSize(): TextSizeKey {
+  try {
+    const saved = localStorage.getItem(TEXT_SIZE_KEY);
+    return TEXT_SIZES.some(size => size.key === saved) ? (saved as TextSizeKey) : "normal";
+  } catch {
+    return "normal";
+  }
+}
+/** Everything is sized in rem, so changing the root font size scales the whole app. */
+function applyTextSize(key: TextSizeKey) {
+  document.documentElement.style.fontSize = `${TEXT_SIZES.find(size => size.key === key)?.px ?? 16}px`;
+}
 
 const SIDEBAR_WIDTH_KEY = "sidebar-width";
 const DEFAULT_WIDTH = 240;
@@ -210,16 +294,41 @@ function DashboardLayoutContent({
   const [location, setLocation] = useLocation();
   const { state, toggleSidebar } = useSidebar();
   const { theme, toggleTheme } = useTheme();
+  const [textSize, setTextSize] = useState<TextSizeKey>(readTextSize);
+  useEffect(() => {
+    applyTextSize(textSize);
+    try {
+      localStorage.setItem(TEXT_SIZE_KEY, textSize);
+    } catch {
+      // storage unavailable
+    }
+  }, [textSize]);
   const isCollapsed = state === "collapsed";
   const [isResizing, setIsResizing] = useState(false);
   const sidebarRef = useRef<HTMLDivElement>(null);
   const isMobile = useIsMobile();
   const [searchOpen, setSearchOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
-  const [collectionsOpen, setCollectionsOpen] = useState(true);
+  const [collectionsOpen, setCollectionsOpen] = useState(false);
   const isAdmin = user?.role === "admin";
   const hasBusinessAccess = user?.role === "admin" || user?.role === "operations_finance";
   const visibleMenuItems = menuItems.filter(item => item.roles.includes(user?.role || "user"));
+  const currentSearch = useSearch();
+  // A menu link is active when its path matches and, if it has ?tab=…, that tab is open.
+  const isMenuActive = (path: string) => {
+    const [base, query] = path.split("?");
+    if (query) {
+      const wanted = new URLSearchParams(query);
+      const now = new URLSearchParams(currentSearch);
+      return location === base && Array.from(wanted.entries()).every(([key, value]) => key === "new" ? false : now.get(key) === value);
+    }
+    if (base === "/finance" || base === "/stock-reports") return location === base && !currentSearch;
+    if (base === "/stock/PM") return /^\/stock\/(PM|PG|PJ|SM|SG|SJ)$/i.test(location);
+    if (base === "/orders") return location === "/orders" || (/^\/orders\/\d+/.test(location));
+    return location === base || (base !== "/" && location.startsWith(base + "/"));
+  };
+  // "Cash Receive" etc. must reopen the form even when clicked twice: add a fresh marker.
+  const openMenu = (path: string) => setLocation(path.includes("new=") ? `${path}&at=${Date.now()}` : path);
 
   // Fetch data for search and collections (only what this role may see)
   const { data: products } = trpc.products.list.useQuery(undefined, { enabled: isAdmin });
@@ -336,119 +445,105 @@ function DashboardLayoutContent({
           </SidebarHeader>
 
           <SidebarContent className="gap-0 pt-3">
-            <SidebarMenu className="px-2 py-1 space-y-1">
-              {/* Regular menu items before Shaikha Collection */}
-              {visibleMenuItems.filter(item => item.path === "/" || item.path === "/products").map(item => {
-                const isActive = location === item.path;
+            <div className="px-2 py-1">
+              {menuSections.map(section => {
+                const items = section.items.filter(item => item.roles.includes(user?.role || "user"));
+                const showCollections = section.title === "Catalogue" && isAdmin;
+                if (!items.length && !showCollections) return null;
                 return (
-                  <SidebarMenuItem key={item.path}>
-                    <SidebarMenuButton
-                      isActive={isActive}
-                      onClick={() => setLocation(item.path)}
-                      tooltip={item.label}
-                      className={`h-10 transition-all font-normal rounded-lg ${
-                        isActive 
-                          ? 'bg-sidebar-accent text-primary' 
-                          : 'text-muted-foreground hover:text-foreground hover:bg-sidebar-accent/50'
-                      }`}
+                  <div key={section.title ?? "home"} className="mb-2">
+                    {section.title && !isCollapsed && (
+                      <p className="px-3 pb-1 pt-3 text-[11px] font-semibold uppercase tracking-[0.14em] text-muted-foreground/70">{section.title}</p>
+                    )}
+                    <SidebarMenu className="space-y-0.5">
+                      {items.map(item => {
+                        const isActive = isMenuActive(item.path);
+                        return (
+                          <SidebarMenuItem key={item.path}>
+                            <SidebarMenuButton
+                              isActive={isActive}
+                              onClick={() => openMenu(item.path)}
+                              tooltip={item.label}
+                              className={`h-10 transition-all font-normal rounded-lg ${
+                                isActive
+                                  ? 'bg-sidebar-accent text-primary'
+                                  : 'text-muted-foreground hover:text-foreground hover:bg-sidebar-accent/50'
+                              }`}
+                            >
+                              <item.icon className={`h-4 w-4 ${isActive ? "text-primary" : ""}`} />
+                              <span className="font-medium">{item.label}</span>
+                            </SidebarMenuButton>
+                          </SidebarMenuItem>
+                        );
+                      })}
+                    {/* Shaikha Collection with submenu */}
+                    {showCollections && <Collapsible
+                      open={collectionsOpen}
+                      onOpenChange={setCollectionsOpen}
+                      className="group/collapsible"
                     >
-                      <item.icon
-                        className={`h-4 w-4 ${isActive ? "text-primary" : ""}`}
-                      />
-                      <span className="font-medium">{item.label}</span>
-                    </SidebarMenuButton>
-                  </SidebarMenuItem>
-                );
-              })}
-
-              {/* Shaikha Collection with submenu */}
-              {isAdmin && <Collapsible
-                open={collectionsOpen}
-                onOpenChange={setCollectionsOpen}
-                className="group/collapsible"
-              >
-                <SidebarMenuItem>
-                  <CollapsibleTrigger asChild>
-                    <SidebarMenuButton
-                      isActive={isCollectionActive}
-                      tooltip="Shaikha Collection"
-                      className={`h-10 transition-all font-normal rounded-lg ${
-                        isCollectionActive 
-                          ? 'bg-sidebar-accent text-primary' 
-                          : 'text-muted-foreground hover:text-foreground hover:bg-sidebar-accent/50'
-                      }`}
-                    >
-                      <Crown className={`h-4 w-4 ${isCollectionActive ? "text-primary" : ""}`} />
-                      <span className="font-medium">Shaikha Collection</span>
-                      <ChevronRight className={`ml-auto h-4 w-4 transition-transform duration-200 ${collectionsOpen ? "rotate-90" : ""}`} />
-                    </SidebarMenuButton>
-                  </CollapsibleTrigger>
-                  <CollapsibleContent>
-                    <SidebarMenuSub className="ml-0 border-l-0 px-1.5">
-                      {/* All Collections link */}
-                      <SidebarMenuSubItem>
-                        <SidebarMenuSubButton
-                          onClick={() => setLocation("/collections")}
-                          isActive={location === "/collections"}
-                          className={`h-9 rounded-lg ${
-                            location === "/collections"
-                              ? 'bg-sidebar-accent/70 text-primary'
-                              : 'text-muted-foreground hover:text-foreground hover:bg-sidebar-accent/30'
-                          }`}
-                        >
-                          <FolderOpen className="h-3.5 w-3.5 mr-2" />
-                          <span className="text-sm">All Collections</span>
-                        </SidebarMenuSubButton>
-                      </SidebarMenuSubItem>
-                      
-                      {/* Individual collections */}
-                      {collections?.map((collection) => (
-                        <SidebarMenuSubItem key={collection.id}>
-                          <SidebarMenuSubButton
-                            onClick={() => setLocation(`/collections/${collection.id}`)}
-                            isActive={activeCollectionId === collection.id}
-                            className={`h-9 rounded-lg ${
-                              activeCollectionId === collection.id
-                                ? 'bg-sidebar-accent/70 text-primary'
-                                : 'text-muted-foreground hover:text-foreground hover:bg-sidebar-accent/30'
+                      <SidebarMenuItem>
+                        <CollapsibleTrigger asChild>
+                          <SidebarMenuButton
+                            isActive={isCollectionActive}
+                            tooltip="Shaikha Collection"
+                            className={`h-10 transition-all font-normal rounded-lg ${
+                              isCollectionActive 
+                                ? 'bg-sidebar-accent text-primary' 
+                                : 'text-muted-foreground hover:text-foreground hover:bg-sidebar-accent/50'
                             }`}
                           >
-                            <span className="text-sm truncate">{collection.name}</span>
-                            <span className="ml-auto text-xs text-muted-foreground/70">
-                              {collection.productCount || 0}
-                            </span>
-                          </SidebarMenuSubButton>
-                        </SidebarMenuSubItem>
-                      ))}
-                    </SidebarMenuSub>
-                  </CollapsibleContent>
-                </SidebarMenuItem>
-              </Collapsible>}
-
-              {/* Rest of menu items after Shaikha Collection */}
-              {visibleMenuItems.filter(item => item.path !== "/" && item.path !== "/products").map(item => {
-                const isActive = location === item.path;
-                return (
-                  <SidebarMenuItem key={item.path}>
-                    <SidebarMenuButton
-                      isActive={isActive}
-                      onClick={() => setLocation(item.path)}
-                      tooltip={item.label}
-                      className={`h-10 transition-all font-normal rounded-lg ${
-                        isActive 
-                          ? 'bg-sidebar-accent text-primary' 
-                          : 'text-muted-foreground hover:text-foreground hover:bg-sidebar-accent/50'
-                      }`}
-                    >
-                      <item.icon
-                        className={`h-4 w-4 ${isActive ? "text-primary" : ""}`}
-                      />
-                      <span className="font-medium">{item.label}</span>
-                    </SidebarMenuButton>
-                  </SidebarMenuItem>
+                            <Crown className={`h-4 w-4 ${isCollectionActive ? "text-primary" : ""}`} />
+                            <span className="font-medium">Shaikha Collection</span>
+                            <ChevronRight className={`ml-auto h-4 w-4 transition-transform duration-200 ${collectionsOpen ? "rotate-90" : ""}`} />
+                          </SidebarMenuButton>
+                        </CollapsibleTrigger>
+                        <CollapsibleContent>
+                          <SidebarMenuSub className="ml-0 border-l-0 px-1.5">
+                            {/* All Collections link */}
+                            <SidebarMenuSubItem>
+                              <SidebarMenuSubButton
+                                onClick={() => setLocation("/collections")}
+                                isActive={location === "/collections"}
+                                className={`h-9 rounded-lg ${
+                                  location === "/collections"
+                                    ? 'bg-sidebar-accent/70 text-primary'
+                                    : 'text-muted-foreground hover:text-foreground hover:bg-sidebar-accent/30'
+                                }`}
+                              >
+                                <FolderOpen className="h-3.5 w-3.5 mr-2" />
+                                <span className="text-sm">All Collections</span>
+                              </SidebarMenuSubButton>
+                            </SidebarMenuSubItem>
+                      
+                            {/* Individual collections */}
+                            {collections?.map((collection) => (
+                              <SidebarMenuSubItem key={collection.id}>
+                                <SidebarMenuSubButton
+                                  onClick={() => setLocation(`/collections/${collection.id}`)}
+                                  isActive={activeCollectionId === collection.id}
+                                  className={`h-9 rounded-lg ${
+                                    activeCollectionId === collection.id
+                                      ? 'bg-sidebar-accent/70 text-primary'
+                                      : 'text-muted-foreground hover:text-foreground hover:bg-sidebar-accent/30'
+                                  }`}
+                                >
+                                  <span className="text-sm truncate">{collection.name}</span>
+                                  <span className="ml-auto text-xs text-muted-foreground/70">
+                                    {collection.productCount || 0}
+                                  </span>
+                                </SidebarMenuSubButton>
+                              </SidebarMenuSubItem>
+                            ))}
+                          </SidebarMenuSub>
+                        </CollapsibleContent>
+                      </SidebarMenuItem>
+                    </Collapsible>}
+                    </SidebarMenu>
+                  </div>
                 );
               })}
-            </SidebarMenu>
+            </div>
           </SidebarContent>
 
           <SidebarFooter className="p-3 border-t border-sidebar-border">
@@ -513,6 +608,21 @@ function DashboardLayoutContent({
           </div>
           
           <div className="flex items-center gap-2">
+            {/* Text size: bigger letters for easier reading (remembered on this computer) */}
+            <div className="hidden items-center rounded-lg border border-border p-0.5 sm:flex" title="Text size">
+              {TEXT_SIZES.map(size => (
+                <button
+                  key={size.key}
+                  type="button"
+                  onClick={() => setTextSize(size.key)}
+                  className={`rounded-md px-2 py-1 leading-none transition ${textSize === size.key ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:text-foreground"}`}
+                  style={{ fontSize: size.label === "A" ? 12 : size.label === "A+" ? 14 : 16 }}
+                  aria-label={`Text size ${size.label}`}
+                >
+                  {size.label}
+                </button>
+              ))}
+            </div>
             {/* Theme Toggle */}
             <Button
               variant="ghost"

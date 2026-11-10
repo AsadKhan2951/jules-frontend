@@ -4,6 +4,7 @@ import NotFound from "@/pages/NotFound";
 import { Route, Switch, useLocation } from "wouter";
 import ErrorBoundary from "./components/ErrorBoundary";
 import { ThemeProvider } from "./contexts/ThemeContext";
+import { QuickTasks } from "@/components/QuickTasks";
 import DashboardLayout from "./components/DashboardLayout";
 import Dashboard from "./pages/Dashboard";
 import Products from "./pages/Products";
@@ -24,8 +25,25 @@ import AccessManagement from "./pages/AccessManagement";
 import Invoices from "./pages/Invoices";
 import Vendors from "./pages/Vendors";
 import Backups from "./pages/Backups";
+import StockVouchers from "./pages/StockVouchers";
+import StockReports from "./pages/StockReports";
 import RoleGate from "./components/RoleGate";
 import { useAuth } from "./_core/hooks/useAuth";
+
+/** Super Admin gets the full dashboard; staff get the everyday jobs as big buttons. */
+function Home() {
+  const { user } = useAuth();
+  if (user?.role === "admin") return <Dashboard />;
+  return (
+    <div className="space-y-6 animate-fadeIn">
+      <div>
+        <h1 className="text-2xl font-semibold text-foreground">Welcome{user?.name ? `, ${user.name}` : ""}</h1>
+        <p className="mt-1 text-sm text-muted-foreground">Choose what you want to do. Everything is also in the menu on the left.</p>
+      </div>
+      <QuickTasks />
+    </div>
+  );
+}
 
 function Router() {
   return (
@@ -36,7 +54,7 @@ function Router() {
       {/* Protected routes with Dashboard Layout */}
       <Route path="/">
         <DashboardLayout>
-          <RoleGate allow={["admin"]}><Dashboard /></RoleGate>
+          <RoleGate allow={["admin", "operations_finance"]}><Home /></RoleGate>
         </DashboardLayout>
       </Route>
       <Route path="/products/import">
@@ -107,6 +125,16 @@ function Router() {
       <Route path="/invoices">
         <DashboardLayout>
           <RoleGate allow={["admin", "operations_finance"]}><Invoices /></RoleGate>
+        </DashboardLayout>
+      </Route>
+      <Route path="/stock/:type?">
+        <DashboardLayout>
+          <RoleGate allow={["admin", "operations_finance"]}><StockVouchers /></RoleGate>
+        </DashboardLayout>
+      </Route>
+      <Route path="/stock-reports">
+        <DashboardLayout>
+          <RoleGate allow={["admin", "operations_finance"]}><StockReports /></RoleGate>
         </DashboardLayout>
       </Route>
       <Route path="/backups">

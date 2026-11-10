@@ -1,4 +1,5 @@
 import { trpc } from "@/lib/trpc";
+import { METAL_NAMES } from "@shared/metals";
 import { DateInput } from "@/components/DateInput";
 import { InvoiceViewDialog } from "@/components/InvoiceViewDialog";
 import { Button } from "@/components/ui/button";
@@ -100,7 +101,15 @@ export default function OrderDetail() {
   const orderId = Number(params.id);
 
   // State
-  const [activeTab, setActiveTab] = useState("overview");
+  // "?tab=processes" opens the Processes tab directly (Orders list → Processes).
+  const [activeTab, setActiveTab] = useState(() => {
+    try {
+      const tab = new URLSearchParams(window.location.search).get("tab");
+      return tab === "processes" || tab === "invoices" ? tab : "overview";
+    } catch {
+      return "overview";
+    }
+  });
   const [showProcessModal, setShowProcessModal] = useState(false);
   const [editingProcess, setEditingProcess] = useState<any>(null);
   const [showProcessDetailModal, setShowProcessDetailModal] = useState(false);
@@ -136,6 +145,7 @@ export default function OrderDetail() {
     issueBodyWeight: "",
     returnBodyMetal: "",
     returnBodyWeight: "",
+    returnWastage: "",
     returnBodyPieces: 0,
     lumpSumLabour: "0",
     gemsIssueType: "",
@@ -174,8 +184,9 @@ export default function OrderDetail() {
   });
 
   const updateProcessMutation = trpc.orderProcesses.update.useMutation({
-    onSuccess: () => {
-      toast.success("Process updated");
+    onSuccess: (result: any) => {
+      if (result?.labourWarning) toast.warning(result.labourWarning);
+      else toast.success("Process updated");
       setShowProcessDetailModal(false);
       utils.orderProcesses.list.invalidate();
     },
@@ -259,6 +270,7 @@ export default function OrderDetail() {
       issueBodyWeight: p.issueBodyWeight || "",
       returnBodyMetal: p.returnBodyMetal || "",
       returnBodyWeight: p.returnBodyWeight || "",
+      returnWastage: p.returnWastage || "",
       returnBodyPieces: p.returnBodyPieces || 0,
       lumpSumLabour: p.lumpSumLabour || "0",
       gemsIssueType: p.gemsIssueType || "",
@@ -279,11 +291,13 @@ export default function OrderDetail() {
       id: selectedProcess.process.id,
       status: processDetailForm.processStatus as any,
       actualDeliveryDate: processDetailForm.actualDeliveryDate || undefined,
-      issueBodyWeight: processDetailForm.issueBodyWeight || undefined,
+      // Empty strings clear a value on the server (so a removed weight/labour really goes away).
+      issueBodyWeight: processDetailForm.issueBodyWeight ?? "",
       returnBodyMetal: processDetailForm.returnBodyMetal || undefined,
-      returnBodyWeight: processDetailForm.returnBodyWeight || undefined,
+      returnBodyWeight: processDetailForm.returnBodyWeight ?? "",
+      returnWastage: processDetailForm.returnWastage ?? "",
       returnBodyPieces: processDetailForm.returnBodyPieces || undefined,
-      lumpSumLabour: processDetailForm.lumpSumLabour || undefined,
+      lumpSumLabour: processDetailForm.lumpSumLabour === "" ? "0" : processDetailForm.lumpSumLabour,
       gemsIssueType: processDetailForm.gemsIssueType || undefined,
       gemsIssueSource: processDetailForm.gemsIssueSource || undefined,
       gemsIssueDate: processDetailForm.gemsIssueDate || undefined,
@@ -930,7 +944,7 @@ export default function OrderDetail() {
 
               {/* Lump Sum Labour */}
               <div className="space-y-2">
-                <Label className="text-xs text-muted-foreground">Lump Sum Labour (PKR)</Label>
+                <Label className="text-xs text-muted-foreground">Labour (PKR) — goes to the karigar's account when the process is Complete</Label>
                 <Input
                   type="number"
                   value={processDetailForm.lumpSumLabour}
@@ -941,7 +955,8 @@ export default function OrderDetail() {
 
               {/* Issue Body */}
               <div className="pt-3 border-t border-border">
-                <h4 className="text-sm font-semibold text-foreground mb-3">Issue Body</h4>
+                <h4 className="text-sm font-semibold text-foreground mb-1">Issue Body (note)</h4>
+                <p className="mb-3 text-xs text-muted-foreground">For the karigar's metal account, give metal with Karigar &amp; Stock → Issue to Karigar.</p>
                 <div className="grid grid-cols-1 gap-3">
                   <div className="space-y-1.5">
                     <Label className="text-xs text-muted-foreground">Weight (gm)</Label>
@@ -956,11 +971,12 @@ export default function OrderDetail() {
                 </div>
               </div>
 
-              {/* Return Body */}
+              {/* Received from karigar (Zewar "Stock Received From Karigar") */}
               <div className="pt-3 border-t border-border">
-                <h4 className="text-sm font-semibold text-foreground mb-3">Return Body</h4>
-                <div className="grid grid-cols-3 gap-3">
-                  <div className="space-y-1.5">
+                <h4 className="text-sm font-semibold text-foreground mb-1">Received from Karigar</h4>
+                <p className="mb-3 text-xs text-muted-foreground">Weight of the finished piece + the wastage allowed. The total is taken off the karigar's metal balance.</p>
+                <div className="grid grid-cols-2 gap-3 sm:grid-cols-5">
+                  <div className="col-span-2 space-y-1.5 sm:col-span-1">
                     <Label className="text-xs text-muted-foreground">Metal</Label>
                     <Select
                       value={processDetailForm.returnBodyMetal}
@@ -970,11 +986,7 @@ export default function OrderDetail() {
                         <SelectValue placeholder="Select" />
                       </SelectTrigger>
                       <SelectContent>
-                        <SelectItem value="Gold 22k">Gold 22k</SelectItem>
-                        <SelectItem value="Gold 24k">Gold 24k</SelectItem>
-                        <SelectItem value="Gold 18k">Gold 18k</SelectItem>
-                        <SelectItem value="Silver">Silver</SelectItem>
-                        <SelectItem value="Platinum">Platinum</SelectItem>
+                        {METAL_NAMES.map(metal => <SelectItem key={metal} value={metal}>{metal}</SelectItem>)}
                       </SelectContent>
                     </Select>
                   </div>
@@ -985,11 +997,27 @@ export default function OrderDetail() {
                       value={processDetailForm.returnBodyWeight}
                       onChange={(e) => setProcessDetailForm({ ...processDetailForm, returnBodyWeight: e.target.value })}
                       className="bg-input border-border h-9"
-                      placeholder="e.g., 192.500"
+                      placeholder="25.710"
                     />
                   </div>
                   <div className="space-y-1.5">
-                    <Label className="text-xs text-muted-foreground">No. of Pieces</Label>
+                    <Label className="text-xs text-muted-foreground">Wastage (gm)</Label>
+                    <Input
+                      type="number"
+                      value={processDetailForm.returnWastage}
+                      onChange={(e) => setProcessDetailForm({ ...processDetailForm, returnWastage: e.target.value })}
+                      className="bg-input border-border h-9"
+                      placeholder="3.482"
+                    />
+                  </div>
+                  <div className="space-y-1.5">
+                    <Label className="text-xs text-muted-foreground">Total</Label>
+                    <div className="flex h-9 items-center rounded-md border border-border bg-muted/40 px-3 font-mono text-sm tabular-nums">
+                      {((Number(processDetailForm.returnBodyWeight) || 0) + (Number(processDetailForm.returnWastage) || 0)).toFixed(3)}
+                    </div>
+                  </div>
+                  <div className="space-y-1.5">
+                    <Label className="text-xs text-muted-foreground">Pieces</Label>
                     <Input
                       type="number"
                       value={processDetailForm.returnBodyPieces}

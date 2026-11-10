@@ -1,7 +1,10 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
+import { useSearch } from "wouter";
 import { trpc } from "@/lib/trpc";
 import { DateInput } from "@/components/DateInput";
 import { LedgerSelect } from "@/components/LedgerSelect";
+import { LedgerReportPanel } from "@/components/LedgerReportPanel";
+import { enterToNext } from "@/lib/enterToNext";
 import { useAuth } from "@/_core/hooks/useAuth";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -47,12 +50,15 @@ const entryLabels: Record<string, string> = {
   customer_advance: "Customer Advance",
   reversal: "Reversal",
   opening_balance: "Opening Balance",
+  karigar_labour: "Karigar Labour",
 };
 
 export default function Finance() {
   const { user } = useAuth();
   const utils = trpc.useUtils();
   const [activeTab, setActiveTab] = useState("overview");
+  // Menu links: /finance?tab=ledger, /finance?new=receipt|payment|journal (opens the form; editing turns on).
+  const search = useSearch();
   const [accountSearch, setAccountSearch] = useState("");
   const [showAccountDialog, setShowAccountDialog] = useState(false);
   const [showVoucherDialog, setShowVoucherDialog] = useState(false);
@@ -110,7 +116,7 @@ export default function Finance() {
       utils.finance.accounts.list.invalidate(),
       utils.finance.journals.list.invalidate(),
       utils.finance.reports.trialBalance.invalidate(),
-      utils.finance.reports.accountLedger.invalidate(),
+      utils.finance.reports.invalidate(),
     ]);
   };
 
@@ -133,6 +139,23 @@ export default function Finance() {
     resetVoucher(voucherType);
     setShowVoucherDialog(true);
   };
+
+  useEffect(() => {
+    const params = new URLSearchParams(search);
+    const tab = params.get("tab");
+    if (tab && ["overview", "accounts", "cashbook", "journal", "ledger", "trial"].includes(tab)) setActiveTab(tab);
+    const action = params.get("new");
+    if (action === "receipt" || action === "payment") {
+      setEditMode(true);
+      setActiveTab("cashbook");
+      openNewVoucher(action === "receipt" ? "cash_receipt" : "cash_payment");
+    } else if (action === "journal") {
+      setEditMode(true);
+      setActiveTab("journal");
+      setShowJournalDialog(true);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [search]);
 
   const createVoucher = trpc.finance.vouchers.create.useMutation({
     onSuccess: async data => {
@@ -421,8 +444,7 @@ export default function Finance() {
         </TabsContent>
 
         <TabsContent value="ledger" className="mt-5 space-y-4">
-          <Card className="border-border"><CardContent className="p-5"><Label className="text-sm">Select Detail Ledger</Label><div className="mt-2 max-w-lg"><LedgerSelect accounts={detailAccounts} value={selectedAccountId} onChange={setSelectedAccountId} placeholder="Choose an account" /></div></CardContent></Card>
-          {selectedAccountId && <Card className="border-border"><CardHeader><CardTitle className="text-base">{accountLedger.data?.account.code} — {accountLedger.data?.account.title}</CardTitle></CardHeader><CardContent className="p-0 overflow-x-auto"><table className="w-full text-sm"><thead><tr className="border-y border-border bg-muted/30"><th className="px-5 py-3 text-left">Date</th><th className="px-5 py-3 text-left">Entry</th><th className="px-5 py-3 text-left">Narration</th><th className="px-5 py-3 text-right">Debit</th><th className="px-5 py-3 text-right">Credit</th><th className="px-5 py-3 text-right">Balance</th></tr></thead><tbody>{accountLedger.data?.transactions.map(({ entry, line, runningBalance, runningBalanceSide }) => <tr key={line.id} className="border-b border-border/60"><td className="px-5 py-3">{new Date(entry.entryDate).toLocaleDateString()}</td><td className="px-5 py-3 font-mono text-xs text-primary">{entry.entryNumber}</td><td className="px-5 py-3 text-muted-foreground">{line.description || entry.narration || "—"}</td><td className="px-5 py-3 text-right">{money(line.debit)}</td><td className="px-5 py-3 text-right">{money(line.credit)}</td><td className="px-5 py-3 text-right font-medium">{money(runningBalance)} <span className="text-xs uppercase text-muted-foreground">{runningBalanceSide === "debit" ? "Dr" : "Cr"}</span></td></tr>)}</tbody></table>{!accountLedger.data?.transactions.length && <div className="py-10 text-center text-sm text-muted-foreground">No posted transactions for this account.</div>}</CardContent></Card>}
+          <LedgerReportPanel accounts={detailAccounts} />
         </TabsContent>
 
         <TabsContent value="trial" className="mt-5">
@@ -430,7 +452,7 @@ export default function Finance() {
         </TabsContent>
       </Tabs>
 
-      <Dialog open={showAccountDialog} onOpenChange={setShowAccountDialog}><DialogContent className="max-w-xl"><DialogHeader><DialogTitle>New Ledger Account</DialogTitle><DialogDescription>Create a control or detail ledger. Account codes and entity ledgers are generated automatically.</DialogDescription></DialogHeader><div className="grid grid-cols-2 gap-4 py-2"><Field label="Account Code (optional)"><Input value={accountForm.code} onChange={event => setAccountForm(form => ({ ...form, code: event.target.value }))} placeholder="Auto-generated" /></Field><Field label="Title"><Input value={accountForm.title} onChange={event => setAccountForm(form => ({ ...form, title: event.target.value }))} placeholder="Office Expense" /></Field><Field label="Ledger Type"><Select value={accountForm.ledgerType} onValueChange={(value: "control" | "detail") => setAccountForm(form => ({ ...form, ledgerType: value, parentId: value === "control" ? "" : form.parentId }))}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent><SelectItem value="control">Control</SelectItem><SelectItem value="detail">Detail</SelectItem></SelectContent></Select></Field><Field label="Account Class"><Select value={accountForm.accountClass} onValueChange={(value: typeof accountForm.accountClass) => setAccountForm(form => ({ ...form, accountClass: value }))}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent>{["asset", "liability", "equity", "income", "expense"].map(value => <SelectItem key={value} value={value}>{value[0].toUpperCase() + value.slice(1)}</SelectItem>)}</SelectContent></Select></Field>{accountForm.ledgerType === "detail" && <div className="col-span-2"><Field label="Parent Control Ledger"><Select value={accountForm.parentId} onValueChange={value => setAccountForm(form => ({ ...form, parentId: value }))}><SelectTrigger><SelectValue placeholder="Select parent" /></SelectTrigger><SelectContent>{controlAccounts.map(account => <SelectItem key={account.id} value={String(account.id)}>{account.code} — {account.title}</SelectItem>)}</SelectContent></Select></Field></div>}<Field label="Opening Balance"><Input type="number" value={accountForm.openingBalance} onChange={event => setAccountForm(form => ({ ...form, openingBalance: event.target.value }))} /></Field><Field label="Balance Side"><Select value={accountForm.openingBalanceSide} onValueChange={(value: "debit" | "credit") => setAccountForm(form => ({ ...form, openingBalanceSide: value }))}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent><SelectItem value="debit">Debit</SelectItem><SelectItem value="credit">Credit</SelectItem></SelectContent></Select></Field><div className="col-span-2"><Field label="Description"><Textarea value={accountForm.description} onChange={event => setAccountForm(form => ({ ...form, description: event.target.value }))} rows={2} /></Field></div></div><div className="flex justify-end gap-2"><Button variant="outline" onClick={() => setShowAccountDialog(false)}>Cancel</Button><Button onClick={submitAccount} disabled={createAccount.isPending}>Create Ledger</Button></div></DialogContent></Dialog>
+      <Dialog open={showAccountDialog} onOpenChange={setShowAccountDialog}><DialogContent className="max-w-xl"><DialogHeader><DialogTitle>New Ledger Account</DialogTitle><DialogDescription>Create a control or detail ledger. Account codes and entity ledgers are generated automatically.</DialogDescription></DialogHeader><div className="grid grid-cols-2 gap-4 py-2"><Field label="Account Code (optional)"><Input value={accountForm.code} onChange={event => setAccountForm(form => ({ ...form, code: event.target.value }))} placeholder="Auto-generated" /></Field><Field label="Title"><Input value={accountForm.title} onChange={event => setAccountForm(form => ({ ...form, title: event.target.value }))} placeholder="Office Expense" /></Field><Field label="Ledger Type"><Select value={accountForm.ledgerType} onValueChange={(value: "control" | "detail") => setAccountForm(form => ({ ...form, ledgerType: value, parentId: value === "control" ? "" : form.parentId }))}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent><SelectItem value="control">Control</SelectItem><SelectItem value="detail">Detail</SelectItem></SelectContent></Select></Field><Field label="Account Nature"><Select value={accountForm.accountClass} onValueChange={(value: typeof accountForm.accountClass) => setAccountForm(form => ({ ...form, accountClass: value }))}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent>{([["equity", "Capital"], ["asset", "Asset"], ["liability", "Liabilities"], ["expense", "Expense"], ["income", "Revenue"]] as const).map(([value, label]) => <SelectItem key={value} value={value}>{label}</SelectItem>)}</SelectContent></Select></Field>{accountForm.ledgerType === "detail" && <div className="col-span-2"><Field label="Parent Control Ledger"><Select value={accountForm.parentId} onValueChange={value => setAccountForm(form => ({ ...form, parentId: value }))}><SelectTrigger><SelectValue placeholder="Select parent" /></SelectTrigger><SelectContent>{controlAccounts.map(account => <SelectItem key={account.id} value={String(account.id)}>{account.code} — {account.title}</SelectItem>)}</SelectContent></Select></Field></div>}<Field label="Opening Balance"><Input type="number" value={accountForm.openingBalance} onChange={event => setAccountForm(form => ({ ...form, openingBalance: event.target.value }))} /></Field><Field label="Balance Side"><Select value={accountForm.openingBalanceSide} onValueChange={(value: "debit" | "credit") => setAccountForm(form => ({ ...form, openingBalanceSide: value }))}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent><SelectItem value="debit">Debit</SelectItem><SelectItem value="credit">Credit</SelectItem></SelectContent></Select></Field><div className="col-span-2"><Field label="Description"><Textarea value={accountForm.description} onChange={event => setAccountForm(form => ({ ...form, description: event.target.value }))} rows={2} /></Field></div></div><div className="flex justify-end gap-2"><Button variant="outline" onClick={() => setShowAccountDialog(false)}>Cancel</Button><Button onClick={submitAccount} disabled={createAccount.isPending}>Create Ledger</Button></div></DialogContent></Dialog>
 
       <Dialog open={showVoucherDialog} onOpenChange={open => { setShowVoucherDialog(open); if (!open && editingVoucher) resetVoucher(); }}>
         <DialogContent className="max-w-3xl p-0 gap-0">
@@ -449,7 +471,7 @@ export default function Finance() {
             </DialogDescription>
           </DialogHeader>
 
-          <div className="space-y-5 px-6 py-5">
+          <div className="space-y-5 px-6 py-5" onKeyDown={enterToNext}>
             <div className="grid grid-cols-1 gap-4 sm:grid-cols-[auto_170px_minmax(0,1fr)]">
               <Field label="Voucher type">
                 <div className="inline-flex h-9 rounded-md border border-border p-0.5">

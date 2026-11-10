@@ -41,6 +41,8 @@ export default function Orders() {
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState<string>("all");
   const [customerFilter, setCustomerFilter] = useState<string>("all");
+  const [itemFilter, setItemFilter] = useState<string>("all");
+  const [processFilter, setProcessFilter] = useState<string>("all");
   const [deleteConfirm, setDeleteConfirm] = useState<number | null>(null);
 
   const utils = trpc.useUtils();
@@ -92,10 +94,32 @@ export default function Orders() {
             return false;
         }
         if (customerFilter !== "all" && o.order.customerId !== Number(customerFilter)) return false;
+        if (itemFilter !== "all" && !((o as any).itemNames ?? []).includes(itemFilter)) return false;
+        // Process filter: orders with that process still open (not complete), like Zewar's "Process".
+        if (processFilter !== "all" && !((o as any).processes ?? []).some((p: any) => p.processType === processFilter && p.status !== "complete")) return false;
         return true;
       }) || []
     );
-  }, [orders, search, customerFilter, statusFilter]);
+  }, [orders, search, customerFilter, statusFilter, itemFilter, processFilter]);
+
+  const itemNames = useMemo(() => Array.from(new Set((orders ?? []).flatMap((o: any) => o.itemNames ?? []))).sort(), [orders]);
+  const processTypes = useMemo(() => Array.from(new Set((orders ?? []).flatMap((o: any) => (o.processes ?? []).map((p: any) => p.processType)))).sort(), [orders]);
+
+  const copyMutation = trpc.orders.copy.useMutation({
+    onSuccess: (order) => {
+      toast.success(`Copied as ${order.orderNumber} (saved) — check it and confirm`);
+      utils.orders.list.invalidate();
+      setLocation(`/orders/${order.id}/edit`);
+    },
+    onError: (error) => toast.error(error.message),
+  });
+  const reopenMutation = trpc.orders.update.useMutation({
+    onSuccess: () => {
+      toast.success("Order re-opened");
+      utils.orders.list.invalidate();
+    },
+    onError: (error) => toast.error(error.message),
+  });
 
   const savedOrders = useMemo(() => {
     return (
@@ -154,6 +178,28 @@ export default function Orders() {
               <SelectItem key={c.id} value={c.id.toString()}>
                 {c.firstName} {c.lastName}
               </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+        <Select value={itemFilter} onValueChange={setItemFilter}>
+          <SelectTrigger className="w-full sm:w-[170px] bg-card border-border">
+            <SelectValue placeholder="All Items" />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="all">All Items</SelectItem>
+            {itemNames.map((name) => (
+              <SelectItem key={name} value={name}>{name}</SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+        <Select value={processFilter} onValueChange={setProcessFilter}>
+          <SelectTrigger className="w-full sm:w-[170px] bg-card border-border">
+            <SelectValue placeholder="All Processes" />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="all">All Processes</SelectItem>
+            {processTypes.map((name) => (
+              <SelectItem key={name} value={name}>{name} (open)</SelectItem>
             ))}
           </SelectContent>
         </Select>
@@ -248,7 +294,7 @@ export default function Orders() {
                               variant="ghost"
                               size="sm"
                               className="h-7 text-xs"
-                              onClick={() => setLocation(`/orders/${item.order.id}`)}
+                              onClick={() => setLocation(`/orders/${item.order.id}?tab=processes`)}
                             >
                               Processes
                             </Button>
@@ -257,7 +303,8 @@ export default function Orders() {
                               variant="ghost"
                               size="sm"
                               className="h-7 text-xs text-muted-foreground hover:text-foreground"
-                              onClick={() => toast.info("Feature coming soon")}
+                              disabled={copyMutation.isPending}
+                              onClick={() => copyMutation.mutate({ id: item.order.id })}
                             >
                               Copy
                             </Button>
@@ -275,7 +322,10 @@ export default function Orders() {
                               variant="ghost"
                               size="sm"
                               className="h-7 text-xs text-muted-foreground hover:text-foreground"
-                              onClick={() => toast.info("Feature coming soon")}
+                              disabled={reopenMutation.isPending || !["completed", "delivered"].includes(item.order.status)}
+                              onClick={() => {
+                                if (window.confirm(`Re-open order ${item.order.orderNumber}?`)) reopenMutation.mutate({ id: item.order.id, status: "pending" });
+                              }}
                             >
                               Re-Open
                             </Button>
