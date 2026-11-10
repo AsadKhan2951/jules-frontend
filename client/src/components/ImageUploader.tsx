@@ -3,35 +3,27 @@ import { ImagePlus, Loader2, X } from "lucide-react";
 import { toast } from "sonner";
 import { trpc } from "@/lib/trpc";
 import { cn } from "@/lib/utils";
+import { IMAGE_ACCEPT, photoToJpegDataUrl } from "@/lib/imageFiles";
 
 const MAX_SIDE = 1600;
 const MAX_IMAGES = 10;
 
-/** Resize large photos in the browser before upload (keeps uploads small and fast). */
+/** Resize large photos in the browser before upload (keeps uploads small and fast). HEIC from Mac/iPhone is converted to JPG. */
 async function compressImage(file: File): Promise<{ base64: string; contentType: string; filename: string }> {
-  const dataUrl = await new Promise<string>((resolve, reject) => {
-    const reader = new FileReader();
-    reader.onload = () => resolve(String(reader.result));
-    reader.onerror = () => reject(reader.error);
-    reader.readAsDataURL(file);
-  });
-  if (file.type === "image/gif") return { base64: dataUrl, contentType: file.type, filename: file.name };
-
-  const image = await new Promise<HTMLImageElement>((resolve, reject) => {
-    const img = new Image();
-    img.onload = () => resolve(img);
-    img.onerror = () => reject(new Error("Could not read image"));
-    img.src = dataUrl;
-  });
-  const scale = Math.min(1, MAX_SIDE / Math.max(image.width, image.height));
-  const canvas = document.createElement("canvas");
-  canvas.width = Math.round(image.width * scale);
-  canvas.height = Math.round(image.height * scale);
-  const context = canvas.getContext("2d");
-  if (!context) return { base64: dataUrl, contentType: file.type, filename: file.name };
-  context.drawImage(image, 0, 0, canvas.width, canvas.height);
-  const base64 = canvas.toDataURL("image/jpeg", 0.85);
-  return { base64, contentType: "image/jpeg", filename: file.name.replace(/\.[^.]+$/, "") + ".jpg" };
+  if (file.type === "image/gif") {
+    const base64 = await new Promise<string>((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = () => resolve(String(reader.result));
+      reader.onerror = () => reject(reader.error);
+      reader.readAsDataURL(file);
+    });
+    return { base64, contentType: file.type, filename: file.name };
+  }
+  try {
+    return await photoToJpegDataUrl(file, MAX_SIDE, 0.85);
+  } catch (error) {
+    throw new Error(`${file.name}: ${(error as Error).message || "this photo could not be read"}`);
+  }
 }
 
 export function ImageUploader({
@@ -111,7 +103,7 @@ export function ImageUploader({
       <input
         ref={inputRef}
         type="file"
-        accept="image/png,image/jpeg,image/webp,image/gif"
+        accept={IMAGE_ACCEPT}
         multiple
         className="hidden"
         onChange={event => handleFiles(event.target.files)}

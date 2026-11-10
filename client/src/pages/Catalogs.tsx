@@ -67,6 +67,7 @@ import {
 import { Badge } from "@/components/ui/badge";
 import { useState, useMemo, useRef } from "react";
 import { toast } from "sonner";
+import { IMAGE_ACCEPT, photoToJpegDataUrl } from "@/lib/imageFiles";
 import { useLocation } from "wouter";
 
 // Dummy cover images for selection
@@ -269,35 +270,17 @@ export default function Catalogs() {
     const file = event.target.files?.[0];
     if (!file) return;
 
-    // Validate file type
-    if (!file.type.startsWith('image/')) {
-      toast.error("Please select an image file");
-      return;
-    }
-
-    // Validate file size (max 5MB)
-    if (file.size > 5 * 1024 * 1024) {
-      toast.error("Image size must be less than 5MB");
-      return;
-    }
-
     setIsUploading(true);
-
-    // Convert to base64
-    const reader = new FileReader();
-    reader.onload = () => {
-      const base64 = reader.result as string;
-      uploadImageMutation.mutate({
-        base64,
-        filename: file.name,
-        contentType: file.type,
-      });
-    };
-    reader.onerror = () => {
-      toast.error("Failed to read file");
+    try {
+      // Any photo (incl. HEIC from Mac/iPhone) is resized to a JPG first, so size is never a problem.
+      const payload = await photoToJpegDataUrl(file, 1600, 0.85);
+      uploadImageMutation.mutate(payload);
+    } catch (error) {
+      toast.error((error as Error).message || "Could not read this photo");
       setIsUploading(false);
-    };
-    reader.readAsDataURL(file);
+    } finally {
+      event.target.value = "";
+    }
   };
 
   const handleCreateNewCustomer = () => {
@@ -728,7 +711,7 @@ export default function Catalogs() {
                 <input
                   ref={fileInputRef}
                   type="file"
-                  accept="image/*"
+                  accept={IMAGE_ACCEPT}
                   onChange={handleFileUpload}
                   className="hidden"
                 />

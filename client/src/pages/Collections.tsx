@@ -1,10 +1,12 @@
-import { useState } from "react";
+import { useMemo, useState } from "react";
+import { useLocation } from "wouter";
 import { trpc } from "@/lib/trpc";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Checkbox } from "@/components/ui/checkbox";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import {
   Dialog,
   DialogContent,
@@ -61,6 +63,8 @@ export default function Collections() {
   const [deleteConfirm, setDeleteConfirm] = useState<number | null>(null);
   const [viewingCollection, setViewingCollection] = useState<number | null>(null);
   const [viewMode, setViewMode] = useState<'grid' | 'list'>('grid');
+  const [sort, setSort] = useState<"newest" | "oldest" | "name_asc" | "name_desc" | "size">("name_asc");
+  const [, setLocation] = useLocation();
 
   const utils = trpc.useUtils();
   
@@ -75,6 +79,17 @@ export default function Collections() {
   );
 
   const { data: allProducts } = trpc.products.list.useQuery({ isActive: true });
+
+  const sortedCollections = useMemo(() => {
+    const list = [...(collections ?? [])] as any[];
+    const time = (item: any) => new Date(item.createdAt ?? 0).getTime() || 0;
+    if (sort === "newest") list.sort((a, b) => time(b) - time(a) || b.id - a.id);
+    if (sort === "oldest") list.sort((a, b) => time(a) - time(b) || a.id - b.id);
+    if (sort === "name_asc") list.sort((a, b) => String(a.name).localeCompare(String(b.name), undefined, { numeric: true }));
+    if (sort === "name_desc") list.sort((a, b) => String(b.name).localeCompare(String(a.name), undefined, { numeric: true }));
+    if (sort === "size") list.sort((a, b) => Number(b.productCount ?? 0) - Number(a.productCount ?? 0));
+    return list;
+  }, [collections, sort]);
 
   const createMutation = trpc.collections.create.useMutation({
     onSuccess: () => {
@@ -260,6 +275,16 @@ export default function Collections() {
             className="pl-9 bg-card border-border"
           />
         </div>
+        <Select value={sort} onValueChange={(value) => setSort(value as typeof sort)}>
+          <SelectTrigger className="bg-card sm:w-[170px]"><SelectValue /></SelectTrigger>
+          <SelectContent>
+            <SelectItem value="name_asc">Name A–Z</SelectItem>
+            <SelectItem value="name_desc">Name Z–A</SelectItem>
+            <SelectItem value="newest">Newest first</SelectItem>
+            <SelectItem value="oldest">Oldest first</SelectItem>
+            <SelectItem value="size">Most products</SelectItem>
+          </SelectContent>
+        </Select>
         <div className="flex items-center gap-1 p-1 rounded-lg bg-card border border-border">
           <Button
             variant="ghost"
@@ -307,7 +332,7 @@ export default function Collections() {
         </div>
       ) : viewMode === 'grid' ? (
         <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-4">
-          {collections?.map((collection, index) => (
+          {sortedCollections.map((collection, index) => (
             <div
               key={collection.id}
               className="group animate-fadeIn"
@@ -315,7 +340,7 @@ export default function Collections() {
             >
               <div 
                 className="relative aspect-square rounded-xl overflow-hidden bg-card collection-card cursor-pointer"
-                onClick={() => setViewingCollection(collection.id)}
+                onClick={() => setLocation(`/collections/${collection.id}`)}
               >
                 {collection.coverImage ? (
                   <img
@@ -380,11 +405,11 @@ export default function Collections() {
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {collections?.map((collection) => (
+                {sortedCollections.map((collection) => (
                   <TableRow 
                     key={collection.id} 
                     className="border-border hover:bg-muted/30 cursor-pointer"
-                    onClick={() => setViewingCollection(collection.id)}
+                    onClick={() => setLocation(`/collections/${collection.id}`)}
                   >
                     <TableCell>
                       <div className="flex items-center gap-3">

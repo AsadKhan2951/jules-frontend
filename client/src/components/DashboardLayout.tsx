@@ -48,6 +48,7 @@ import {
   ShieldCheck,
   ReceiptText,
   Hammer,
+  DatabaseBackup,
 } from "lucide-react";
 import { CSSProperties, useEffect, useRef, useState } from "react";
 import { useLocation } from "wouter";
@@ -74,6 +75,7 @@ const menuItems = [
   { icon: Hammer, label: "Vendors", path: "/vendors", roles: ["admin", "operations_finance"] },
   { icon: WalletCards, label: "Finance", path: "/finance", roles: ["admin", "operations_finance"] },
   { icon: ShieldCheck, label: "Users & Access", path: "/access", roles: ["admin"] },
+  { icon: DatabaseBackup, label: "Backup & Restore", path: "/backups", roles: ["admin"] },
 ];
 
 const SIDEBAR_WIDTH_KEY = "sidebar-width";

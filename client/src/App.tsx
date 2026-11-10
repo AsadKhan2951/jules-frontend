@@ -23,6 +23,7 @@ import Finance from "./pages/Finance";
 import AccessManagement from "./pages/AccessManagement";
 import Invoices from "./pages/Invoices";
 import Vendors from "./pages/Vendors";
+import Backups from "./pages/Backups";
 import RoleGate from "./components/RoleGate";
 import { useAuth } from "./_core/hooks/useAuth";
 
@@ -106,6 +107,11 @@ function Router() {
       <Route path="/invoices">
         <DashboardLayout>
           <RoleGate allow={["admin", "operations_finance"]}><Invoices /></RoleGate>
+        </DashboardLayout>
+      </Route>
+      <Route path="/backups">
+        <DashboardLayout>
+          <RoleGate allow={["admin"]}><Backups /></RoleGate>
         </DashboardLayout>
       </Route>
       <Route path="/access">

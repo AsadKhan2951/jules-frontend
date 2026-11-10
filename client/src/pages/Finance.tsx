@@ -19,6 +19,7 @@ import {
   Banknote,
   Loader2,
   Pencil,
+  Lock,
   BookOpenCheck,
   Building2,
   CircleDollarSign,
@@ -83,6 +84,8 @@ export default function Finance() {
     narration: "",
   });
   const [voucherLines, setVoucherLines] = useState<VoucherLine[]>([{ accountId: "", amount: "", description: "" }]);
+  // The board is view-only until "Edit" is pressed, so nothing is posted by mistake.
+  const [editMode, setEditMode] = useState(false);
   const [editingVoucher, setEditingVoucher] = useState<{ id: number; entryNumber: string } | null>(null);
   const [loadingVoucherId, setLoadingVoucherId] = useState<number | null>(null);
 
@@ -330,11 +333,27 @@ export default function Finance() {
           <p className="text-sm text-muted-foreground mt-1">Double-entry accounts, cash book, journals, and live balances connected to orders.</p>
         </div>
         <div className="flex flex-wrap gap-2">
-          <Button variant="outline" onClick={() => setShowAccountDialog(true)}><Plus className="h-4 w-4 mr-2" />New Ledger</Button>
-          <Button variant="outline" onClick={() => setShowJournalDialog(true)}><BookOpenCheck className="h-4 w-4 mr-2" />General Journal</Button>
-          <Button onClick={() => openNewVoucher()} className="gold-gradient text-primary-foreground border-0"><ReceiptText className="h-4 w-4 mr-2" />Cash Voucher</Button>
+          {editMode ? (
+            <>
+              <Button variant="outline" onClick={() => setShowAccountDialog(true)}><Plus className="h-4 w-4 mr-2" />New Ledger</Button>
+              <Button variant="outline" onClick={() => setShowJournalDialog(true)}><BookOpenCheck className="h-4 w-4 mr-2" />General Journal</Button>
+              <Button onClick={() => openNewVoucher()} className="gold-gradient text-primary-foreground border-0"><ReceiptText className="h-4 w-4 mr-2" />Cash Voucher</Button>
+              <Button variant="secondary" onClick={() => setEditMode(false)}><Lock className="h-4 w-4 mr-2" />Done</Button>
+            </>
+          ) : (
+            <Button onClick={() => setEditMode(true)} className="gold-gradient text-primary-foreground border-0"><Pencil className="h-4 w-4 mr-2" />Edit</Button>
+          )}
         </div>
       </div>
+
+      {editMode ? (
+        <div className="flex flex-col gap-2 rounded-xl border border-amber-500/40 bg-amber-500/10 px-4 py-3 text-sm sm:flex-row sm:items-center sm:justify-between">
+          <p className="text-foreground"><Pencil className="mr-1.5 inline h-4 w-4 text-amber-500" />Editing is on — vouchers, journals and ledgers you post change the books.</p>
+          <Button size="sm" variant="outline" onClick={() => setEditMode(false)}><Lock className="h-3.5 w-3.5 mr-1.5" />Lock board</Button>
+        </div>
+      ) : (
+        <p className="flex items-center gap-1.5 text-xs text-muted-foreground"><Lock className="h-3.5 w-3.5" />View only. Click <span className="font-medium text-foreground">Edit</span> to post vouchers, journals or ledgers, or to edit/delete entries.</p>
+      )}
 
       <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-4">
         {summaryCards.map(({ label, value, icon: Icon, tone, bg }) => (
@@ -364,15 +383,16 @@ export default function Finance() {
           <Card className="border-border">
             <CardHeader className="pb-3"><CardTitle className="text-base">Recent Finance Activity</CardTitle></CardHeader>
             <CardContent className="p-0">
-              <JournalTable entries={journals.data || []} canReverse={user?.role === "admin"} onReverse={setReversingEntryId} />
+              <JournalTable entries={journals.data || []} canReverse={editMode && user?.role === "admin"} onReverse={setReversingEntryId} />
             </CardContent>
           </Card>
           <Card className="border-border">
             <CardHeader className="pb-3"><CardTitle className="text-base">Controls</CardTitle></CardHeader>
             <CardContent className="space-y-3">
-              <QuickAction icon={ArrowDownLeft} title="Receive money" description="Debit cash, credit customer or ledger" onClick={() => openNewVoucher("cash_receipt")} />
-              <QuickAction icon={ArrowUpRight} title="Make payment" description="Debit expense/vendor, credit cash" onClick={() => openNewVoucher("cash_payment")} />
-              <QuickAction icon={BookOpenCheck} title="Post adjustment" description="Create a balanced general journal" onClick={() => setShowJournalDialog(true)} />
+              {!editMode && <p className="text-xs text-muted-foreground">Click <span className="font-medium text-foreground">Edit</span> at the top to use these.</p>}
+              <QuickAction icon={ArrowDownLeft} title="Receive money" description="Debit cash, credit customer or ledger" disabled={!editMode} onClick={() => openNewVoucher("cash_receipt")} />
+              <QuickAction icon={ArrowUpRight} title="Make payment" description="Debit expense/vendor, credit cash" disabled={!editMode} onClick={() => openNewVoucher("cash_payment")} />
+              <QuickAction icon={BookOpenCheck} title="Post adjustment" description="Create a balanced general journal" disabled={!editMode} onClick={() => setShowJournalDialog(true)} />
             </CardContent>
           </Card>
         </TabsContent>
@@ -393,11 +413,11 @@ export default function Finance() {
         </TabsContent>
 
         <TabsContent value="cashbook" className="mt-5">
-          <Card className="border-border"><CardHeader className="flex-row items-center justify-between"><div><CardTitle className="text-base">Cash Book</CardTitle><p className="text-sm text-muted-foreground mt-1">Posted cash receives and cash payments.</p></div><Button onClick={() => openNewVoucher()}><Plus className="h-4 w-4 mr-2" />New Voucher</Button></CardHeader><CardContent className="p-0"><JournalTable entries={(journals.data || []).filter(item => item.entry.entryType === "cash_receipt" || item.entry.entryType === "cash_payment")} canReverse={false} onReverse={setReversingEntryId} onDelete={setDeletingVoucherId} onEdit={startEditVoucher} loadingId={loadingVoucherId} /></CardContent></Card>
+          <Card className="border-border"><CardHeader className="flex-row items-center justify-between"><div><CardTitle className="text-base">Cash Book</CardTitle><p className="text-sm text-muted-foreground mt-1">Posted cash receives and cash payments.</p></div>{editMode && <Button onClick={() => openNewVoucher()}><Plus className="h-4 w-4 mr-2" />New Voucher</Button>}</CardHeader><CardContent className="p-0"><JournalTable entries={(journals.data || []).filter(item => item.entry.entryType === "cash_receipt" || item.entry.entryType === "cash_payment")} canReverse={false} onReverse={setReversingEntryId} onDelete={editMode ? setDeletingVoucherId : undefined} onEdit={editMode ? startEditVoucher : undefined} loadingId={loadingVoucherId} /></CardContent></Card>
         </TabsContent>
 
         <TabsContent value="journal" className="mt-5">
-          <Card className="border-border"><CardHeader className="flex-row items-center justify-between"><div><CardTitle className="text-base">General Journal</CardTitle><p className="text-sm text-muted-foreground mt-1">Manual adjustments and system-generated entries.</p></div><Button onClick={() => setShowJournalDialog(true)}><Plus className="h-4 w-4 mr-2" />New Entry</Button></CardHeader><CardContent className="p-0"><JournalTable entries={journals.data || []} canReverse={user?.role === "admin"} onReverse={setReversingEntryId} /></CardContent></Card>
+          <Card className="border-border"><CardHeader className="flex-row items-center justify-between"><div><CardTitle className="text-base">General Journal</CardTitle><p className="text-sm text-muted-foreground mt-1">Manual adjustments and system-generated entries.</p></div>{editMode && <Button onClick={() => setShowJournalDialog(true)}><Plus className="h-4 w-4 mr-2" />New Entry</Button>}</CardHeader><CardContent className="p-0"><JournalTable entries={journals.data || []} canReverse={editMode && user?.role === "admin"} onReverse={setReversingEntryId} /></CardContent></Card>
         </TabsContent>
 
         <TabsContent value="ledger" className="mt-5 space-y-4">
@@ -510,8 +530,8 @@ function Field({ label, children }: { label: string; children: React.ReactNode }
   return <div className="min-w-0 space-y-1.5"><Label className="text-xs text-muted-foreground">{label}</Label>{children}</div>;
 }
 
-function QuickAction({ icon: Icon, title, description, onClick }: { icon: typeof Banknote; title: string; description: string; onClick: () => void }) {
-  return <button onClick={onClick} className="w-full rounded-xl border border-border bg-muted/20 p-4 text-left flex gap-3 hover:border-primary/40 hover:bg-primary/5 transition-colors"><div className="h-9 w-9 rounded-lg bg-primary/10 flex items-center justify-center shrink-0"><Icon className="h-4 w-4 text-primary" /></div><div><p className="text-sm font-medium text-foreground">{title}</p><p className="text-xs text-muted-foreground mt-0.5">{description}</p></div></button>;
+function QuickAction({ icon: Icon, title, description, onClick, disabled }: { icon: typeof Banknote; title: string; description: string; onClick: () => void; disabled?: boolean }) {
+  return <button type="button" onClick={onClick} disabled={disabled} className="w-full rounded-xl border border-border bg-muted/20 p-4 text-left flex gap-3 hover:border-primary/40 hover:bg-primary/5 transition-colors disabled:pointer-events-none disabled:opacity-50"><div className="h-9 w-9 rounded-lg bg-primary/10 flex items-center justify-center shrink-0"><Icon className="h-4 w-4 text-primary" /></div><div><p className="text-sm font-medium text-foreground">{title}</p><p className="text-xs text-muted-foreground mt-0.5">{description}</p></div></button>;
 }
 
 function JournalTable({ entries, canReverse, onReverse, onDelete, onEdit, loadingId }: { entries: any[]; canReverse: boolean; onReverse: (id: number) => void; onDelete?: (id: number) => void; onEdit?: (id: number) => void; loadingId?: number | null }) {

@@ -9,6 +9,7 @@ import { Progress } from "@/components/ui/progress";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { cn } from "@/lib/utils";
 import { analysePhoto, readCaptureTime } from "@/lib/photoFeatures";
+import { heicToJpeg, isHeic } from "@/lib/imageFiles";
 import { groupPhotos, type PhotoFeatures } from "@/lib/photoGrouping";
 
 /**
@@ -23,7 +24,7 @@ const FULL_SIDE = 1600;
 const THUMB_SIDE = 480;
 const ANALYSE_CONCURRENCY = 4;
 const IMPORT_CONCURRENCY = 2;
-const IMAGE_EXT = /\.(jpe?g|png|webp)$/i;
+const IMAGE_EXT = /\.(jpe?g|png|webp|heic|heif)$/i;
 
 type Photo = { key: string; file: File; folder: string; time: number | null; preview: string; features: PhotoFeatures | null };
 type Group = { id: string; folder: string; keys: string[]; name: string };
@@ -153,10 +154,7 @@ export default function ImportProducts() {
         hidden++; // macOS "._name.jpeg" metadata files
         continue;
       }
-      if (!IMAGE_EXT.test(file.name)) {
-        if (/\.(heic|heif)$/i.test(file.name)) unsupported.push(file.webkitRelativePath || file.name);
-        continue;
-      }
+      if (!IMAGE_EXT.test(file.name)) continue;
       const folder = folderOf(file);
       if (!folder) continue;
       const key = photoKeyOf(file);
@@ -168,29 +166,36 @@ export default function ImportProducts() {
     }
     setSkipped({ hidden, unsupported, alreadyImported });
     if (!list.length) {
-      toast.message(alreadyImported ? "Every photo in this folder is already imported." : "No JPG/PNG photos found inside sub-folders.");
+      toast.message(alreadyImported ? "Every photo in this folder is already imported." : "No photos (JPG, PNG, HEIC) found inside sub-folders.");
       return;
     }
 
     setStage("analysing");
     setProgress({ done: 0, total: list.length });
     const result = new Map<string, Photo>();
+    const unreadable: string[] = [];
     await pool(list, ANALYSE_CONCURRENCY, async item => {
       let photo: Photo = { ...item, time: null, preview: "", features: null };
       try {
-        const [time, fingerprint] = await Promise.all([readCaptureTime(item.file), analysePhoto(item.file)]);
+        // Mac / iPhone HEIC photos are converted to JPG here; the JPG is what gets uploaded.
+        const file = isHeic(item.file) ? await heicToJpeg(item.file, FULL_SIDE) : item.file;
+        const [time, fingerprint] = await Promise.all([readCaptureTime(item.file), analysePhoto(file)]);
         photo = {
           ...item,
+          file,
           time,
           preview: fingerprint.preview,
           features: { key: item.key, time, shape: fingerprint.shape, aspect: fingerprint.aspect },
         };
       } catch {
         // Unreadable photo: it still gets its own group so nothing is lost.
+        if (isHeic(item.file)) unreadable.push(item.file.webkitRelativePath || item.file.name);
       }
       result.set(item.key, photo);
       setProgress(p => ({ ...p, done: p.done + 1 }));
     });
+
+    if (unreadable.length) setSkipped(current => ({ ...current, unsupported: unreadable }));
 
     // Group per folder.
     const byFolder = new Map<string, Photo[]>();
@@ -427,7 +432,7 @@ export default function ImportProducts() {
               </p>
               {skipped.unsupported.length > 0 && (
                 <p className="text-xs text-amber-600 dark:text-amber-400 mt-1">
-                  {skipped.unsupported.length} HEIC photo(s) can’t be read by the browser — convert to JPG and import again.
+                  {skipped.unsupported.length} HEIC photo(s) could not be converted (no internet or damaged file) — export them as JPG and import again.
                 </p>
               )}
             </div>

@@ -10,7 +10,8 @@ export async function readCaptureTime(file: File): Promise<number | null> {
   try {
     const buffer = await file.slice(0, 256 * 1024).arrayBuffer();
     const view = new DataView(buffer);
-    if (view.byteLength < 4 || view.getUint16(0) !== 0xffd8) return null;
+    if (view.byteLength < 4) return null;
+    if (view.getUint16(0) !== 0xffd8) return await readHeifCaptureTime(file);
     let offset = 2;
     while (offset + 4 <= view.byteLength) {
       const marker = view.getUint16(offset);
@@ -23,6 +24,26 @@ export async function readCaptureTime(file: File): Promise<number | null> {
     }
   } catch {
     // unreadable header
+  }
+  return null;
+}
+
+/** HEIC/HEIF (iPhone, Mac): find the "Exif\0\0" block followed by a TIFF header and read it. */
+async function readHeifCaptureTime(file: File): Promise<number | null> {
+  const buffer = await file.slice(0, 2 * 1024 * 1024).arrayBuffer();
+  const bytes = new Uint8Array(buffer);
+  const view = new DataView(buffer);
+  for (let i = 0; i + 10 < bytes.length; i++) {
+    if (bytes[i] !== 0x45 || bytes[i + 1] !== 0x78 || bytes[i + 2] !== 0x69 || bytes[i + 3] !== 0x66 || bytes[i + 4] !== 0 || bytes[i + 5] !== 0) continue;
+    const tiff = i + 6;
+    const order = view.getUint16(tiff);
+    if (order !== 0x4949 && order !== 0x4d4d) continue;
+    try {
+      const time = parseExif(view, tiff);
+      if (time) return time;
+    } catch {
+      // keep looking
+    }
   }
   return null;
 }

@@ -40,6 +40,20 @@ export default function Products() {
   const [formOpen, setFormOpen] = useState(false);
   const [editing, setEditing] = useState<any | null>(null);
   const [deleteId, setDeleteId] = useState<number | null>(null);
+  const [sort, setSort] = useState<"newest" | "oldest" | "name_asc" | "name_desc">(() => {
+    try {
+      return (localStorage.getItem("jules.productSort") as any) || "newest";
+    } catch {
+      return "newest";
+    }
+  });
+  useEffect(() => {
+    try {
+      localStorage.setItem("jules.productSort", sort);
+    } catch {
+      // storage unavailable
+    }
+  }, [sort]);
 
   useEffect(() => {
     const timer = setTimeout(() => setDebounced(search.trim()), 250);
@@ -56,7 +70,18 @@ export default function Products() {
   const { data: goldPrice } = trpc.goldPrice.getLatest.useQuery();
   const goldRates: GoldRates | null = goldPrice ?? null;
 
-  useEffect(() => setVisible(PAGE_SIZE), [debounced, categoryFilter]);
+  useEffect(() => setVisible(PAGE_SIZE), [debounced, categoryFilter, sort]);
+
+  const sorted = useMemo(() => {
+    const list = [...(products ?? [])] as Item[];
+    const time = (item: Item) => new Date((item.product as any).createdAt ?? 0).getTime() || 0;
+    const name = (item: Item) => String(item.product.name ?? "");
+    if (sort === "newest") list.sort((a, b) => time(b) - time(a) || b.product.id - a.product.id);
+    if (sort === "oldest") list.sort((a, b) => time(a) - time(b) || a.product.id - b.product.id);
+    if (sort === "name_asc") list.sort((a, b) => name(a).localeCompare(name(b), undefined, { numeric: true }));
+    if (sort === "name_desc") list.sort((a, b) => name(b).localeCompare(name(a), undefined, { numeric: true }));
+    return list;
+  }, [products, sort]);
 
   // Load the next page when the sentinel scrolls into view.
   const sentinel = useRef<HTMLDivElement>(null);
@@ -74,7 +99,7 @@ export default function Products() {
     return () => observer.disconnect();
   }, [visible, total, viewMode]);
 
-  const shown = useMemo(() => (products ?? []).slice(0, visible), [products, visible]);
+  const shown = useMemo(() => sorted.slice(0, visible), [sorted, visible]);
 
   const remove = trpc.products.delete.useMutation({
     onSuccess: () => {
@@ -136,6 +161,17 @@ export default function Products() {
                 {cat.name}
               </SelectItem>
             ))}
+          </SelectContent>
+        </Select>
+        <Select value={sort} onValueChange={value => setSort(value as typeof sort)}>
+          <SelectTrigger className="w-full sm:w-[160px] bg-card border-border">
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="newest">Newest first</SelectItem>
+            <SelectItem value="oldest">Oldest first</SelectItem>
+            <SelectItem value="name_asc">Name A–Z</SelectItem>
+            <SelectItem value="name_desc">Name Z–A</SelectItem>
           </SelectContent>
         </Select>
         <div className="flex items-center gap-1 bg-card border border-border rounded-lg p-1 self-start">
