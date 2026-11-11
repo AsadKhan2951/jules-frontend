@@ -94,43 +94,47 @@ const menuSections: Array<{ title: string | null; items: MenuItem[] }> = [
   {
     title: "Sales",
     items: [
-      { icon: ShoppingCart, label: "Sales Orders", path: "/orders", roles: ["admin", "operations_finance"] },
-      { icon: FilePlus2, label: "New Sales Order", path: "/orders/new", roles: ["admin", "operations_finance"] },
-      { icon: ReceiptText, label: "Invoices", path: "/invoices", roles: ["admin", "operations_finance"] },
-      { icon: Users, label: "Customers", path: "/customers", roles: ["admin", "operations_finance"] },
+      { icon: ShoppingCart, label: "Sales Orders", path: "/orders", roles: ["operations_finance"] },
+      { icon: FilePlus2, label: "New Sales Order", path: "/orders/new", roles: ["operations_finance"] },
+      { icon: ReceiptText, label: "Invoices", path: "/invoices", roles: ["operations_finance"] },
+      { icon: Users, label: "Customers", path: "/customers", roles: ["operations_finance"] },
     ],
   },
   {
     title: "Karigar & Stock",
     items: [
-      { icon: ArrowUpFromLine, label: "Issue to Karigar", path: "/stock/VI", roles: ["admin", "operations_finance"] },
-      { icon: ArrowDownToLine, label: "Return from Karigar", path: "/stock/VR", roles: ["admin", "operations_finance"] },
-      { icon: Scale, label: "Purchase / Sale Stock", path: "/stock/PM", roles: ["admin", "operations_finance"] },
-      { icon: Hammer, label: "Karigars (Vendors)", path: "/vendors", roles: ["admin", "operations_finance"] },
+      { icon: ArrowUpFromLine, label: "Issue to Karigar", path: "/stock/VI", roles: ["operations_finance"] },
+      { icon: ArrowDownToLine, label: "Return from Karigar", path: "/stock/VR", roles: ["operations_finance"] },
+      { icon: Scale, label: "Purchase / Sale Stock", path: "/stock/PM", roles: ["operations_finance"] },
+      { icon: Hammer, label: "Karigars (Vendors)", path: "/vendors", roles: ["operations_finance"] },
     ],
   },
   {
     title: "Accounts",
     items: [
-      { icon: ArrowDownLeft, label: "Cash Receive", path: "/finance?new=receipt", roles: ["admin", "operations_finance"] },
-      { icon: ArrowUpRight, label: "Cash Payment", path: "/finance?new=payment", roles: ["admin", "operations_finance"] },
-      { icon: BookOpenCheck, label: "General Journal", path: "/finance?new=journal", roles: ["admin", "operations_finance"] },
-      { icon: BookOpen, label: "Ledger Report", path: "/finance?tab=ledger", roles: ["admin", "operations_finance"] },
-      { icon: WalletCards, label: "Finance Board", path: "/finance", roles: ["admin", "operations_finance"] },
+      { icon: ArrowDownLeft, label: "Cash Receive", path: "/finance?new=receipt", roles: ["operations_finance"] },
+      { icon: ArrowUpRight, label: "Cash Payment", path: "/finance?new=payment", roles: ["operations_finance"] },
+      { icon: BookOpenCheck, label: "General Journal", path: "/finance?new=journal", roles: ["operations_finance"] },
+      { icon: BookOpen, label: "Ledger Report", path: "/finance?tab=ledger", roles: ["operations_finance"] },
+      { icon: WalletCards, label: "Finance Board", path: "/finance", roles: ["operations_finance"] },
     ],
   },
   {
     title: "Reports",
     items: [
-      { icon: ClipboardList, label: "Karigar Statement", path: "/stock-reports?tab=statement", roles: ["admin", "operations_finance"] },
-      { icon: Coins, label: "Gold with Karigars", path: "/stock-reports?tab=balances", roles: ["admin", "operations_finance"] },
-      { icon: PackageCheck, label: "Stock Ready Item", path: "/stock-reports?tab=ready", roles: ["admin", "operations_finance"] },
-      { icon: Boxes, label: "Stock Position", path: "/stock-reports?tab=position", roles: ["admin", "operations_finance"] },
+      { icon: ClipboardList, label: "Karigar Statement", path: "/stock-reports?tab=statement", roles: ["operations_finance"] },
+      { icon: Coins, label: "Gold with Karigars", path: "/stock-reports?tab=balances", roles: ["operations_finance"] },
+      { icon: PackageCheck, label: "Stock Ready Item", path: "/stock-reports?tab=ready", roles: ["operations_finance"] },
+      { icon: Boxes, label: "Stock Position", path: "/stock-reports?tab=position", roles: ["operations_finance"] },
     ],
   },
   {
     title: "Catalogue",
-    items: [{ icon: Package, label: "Products", path: "/products", roles: ["admin"] }],
+    items: [
+      { icon: Package, label: "Products", path: "/products", roles: ["admin"] },
+      // Catalogs are made per customer (Customer page → Catalogs), so admin keeps this link.
+      { icon: Users, label: "Customer Catalogs", path: "/customers", roles: ["admin"] },
+    ],
   },
   {
     title: "Administration",
